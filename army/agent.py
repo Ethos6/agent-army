@@ -149,7 +149,9 @@ class Agent:
             started = time.time()
             reply = self.llm.chat(self.system_prompt, messages)
             messages.append({"role": "assistant", "content": reply})
-            action = parse_action(reply) if self.tools else None
+            action = parse_action(reply)
+            if not self.tools and action and not (reply.strip().startswith(("{", "```")) and "tool" not in action):
+                action = None  # tool-less agents may legitimately mention JSON; only unwrap a bare {"final": ...}
             if action is None or "final" in action:
                 output = _as_text(action["final"]) if action else reply.strip()
                 steps.append(Step(self.name, "final", output, seconds=time.time() - started))
@@ -194,3 +196,41 @@ class Pipeline:
             steps += result.steps
             output, previous = result.output, agent.name
         return Result(output, steps)
+
+
+def agent_tool(agent: "Agent | Pipeline", description: str, name: str | None = None) -> Tool:
+    """Wrap an agent (or pipeline) as a tool so a manager agent can delegate work to it."""
+
+    def delegate(task: str) -> str:
+        return agent.run(task).output
+
+    return Tool(name or f"ask_{agent.name.replace('-', '_')}", description, delegate, {"task": "str"})
+
+
+Agent.as_tool = lambda self, description, name=None: agent_tool(self, description, name)  # type: ignore[attr-defined]
+Pipeline.as_tool = lambda self, description, name=None: agent_tool(self, description, name)  # type: ignore[attr-defined]
+
+
+class Panel:
+    """Ask several agents the same task independently, then have a judge agent synthesize one answer."""
+
+    def __init__(self, members: list[Agent], judge: Agent, name: str = "panel"):
+        self.members, self.judge, self.name = members, judge, name
+
+    @property
+    def tools(self) -> dict[str, Tool]:
+        return {k: v for a in [*self.members, self.judge] for k, v in a.tools.items()}
+
+    def run(self, task: str, verbose: bool = False) -> Result:
+        steps: list[Step] = []
+        answers = []
+        for i, member in enumerate(self.members, 1):
+            if verbose:
+                print(f"-> {member.name}")
+            r = member.run(task, verbose=verbose)
+            steps += r.steps
+            answers.append(f"### Answer {i} ({member.name})\n{r.output}")
+        if verbose:
+            print(f"-> {self.judge.name}")
+        final = self.judge.run(f"Task:\n{task}\n\nIndependent answers:\n\n" + "\n\n".join(answers), verbose=verbose)
+        return Result(final.output, steps + final.steps)
