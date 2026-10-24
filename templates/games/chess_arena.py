@@ -76,4 +76,4 @@ class Arena:
 def build(llm=None, white_model: str = "", black_model: str = "", max_plies: str = "200", seed: str = "", fen: str = ""):
     white = Agent(f"White ({white_model or 'default'})", RULES, llm=get_llm(white_model) if white_model else llm)
     black = Agent(f"Black ({black_model or 'default'})", RULES, llm=get_llm(black_model) if black_model else llm)
-    return Arena(white, black, int(max_plies), int(seed) if seed else None, fen or None)
+    return Arena(white, black, max(1, int(float(max_plies))), int(seed) if seed else None, fen or None)

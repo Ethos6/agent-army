@@ -5,6 +5,8 @@ host must answer truthfully and consistently and the game log shows every questi
 how well a model narrows down a search space. Choose the secret yourself with --opt secret=... to
 test the guesser alone.
 """
+import re
+
 from army import Agent, Result, get_llm, parse_action
 from army.agent import Step
 
@@ -25,8 +27,9 @@ class Game:
 
     def run(self, task: str = "", verbose=False) -> Result:
         secret = self.secret
-        if not secret and "'" in task:
-            secret = task.split("'")[1]
+        quoted = re.search(r"['\"]([^'\"]+)['\"]", task)  # only an explicitly quoted secret, not "Let's play"
+        if not secret and quoted:
+            secret = quoted.group(1)
         if not secret:
             reply = self.host.llm.chat(self.host.instructions, [{"role": "user", "content": f"{task}\nPick a secret. Reply with JSON {{\"final\": \"<secret>\"}}."}])
             secret = str((parse_action(reply) or {}).get("final", reply)).strip()

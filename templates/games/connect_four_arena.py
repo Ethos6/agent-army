@@ -56,8 +56,8 @@ class Arena:
             reply = self.players[disc].llm.chat(self.players[disc].instructions, [{"role": "user", "content": prompt}])
             a = parse_action(reply) or {}
             try:
-                col = int(str(a.get("final", "")).strip())
-            except ValueError:
+                col = int(str(a.get("final", reply)).strip().split()[0])  # accept bare replies like "3"
+            except (ValueError, IndexError):
                 col = -1
             if col in legal:
                 return col, attempt
