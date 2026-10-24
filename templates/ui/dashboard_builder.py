@@ -13,7 +13,7 @@ META = {
     "description": "CSV plus a plain-English description in, a self-contained HTML dashboard with real numbers out.",
     "example": "Build a marketing dashboard from examples/data/campaigns.csv: revenue and signups by channel and month",
 }
-EVALS = [{"input": "Dashboard of spend and revenue by channel from examples/data/campaigns.csv", "must_contain": ["saved", ".html"], "max_seconds": 300}]
+EVALS = [{"input": "Dashboard of spend and revenue by channel from examples/data/campaigns.csv", "must_contain": ["outputs/", ".html"], "max_seconds": 300}]
 
 
 def build(llm=None):

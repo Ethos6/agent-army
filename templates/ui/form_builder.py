@@ -13,7 +13,7 @@ META = {
     "description": "Plain-English description to an accessible, validated, self-contained HTML form.",
     "example": "A volunteer sign-up form: name, email, availability by weekday, skills, t-shirt size, consent checkbox",
 }
-EVALS = [{"input": "A simple contact form with name, email and message", "must_contain": ["saved", ".html"], "max_seconds": 180}]
+EVALS = [{"input": "A simple contact form with name, email and message", "must_contain": ["outputs/", ".html"], "max_seconds": 180}]
 
 
 def build(llm=None):

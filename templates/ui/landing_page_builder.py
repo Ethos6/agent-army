@@ -12,7 +12,7 @@ META = {
     "description": "Product description or URL in, a responsive, conversion-focused single-file landing page out.",
     "example": "Landing page for a meal-prep delivery service for busy parents in Austin",
 }
-EVALS = [{"input": "Landing page for a dog-walking app", "must_contain": ["saved", ".html"], "max_seconds": 240}]
+EVALS = [{"input": "Landing page for a dog-walking app", "must_contain": ["outputs/", ".html"], "max_seconds": 240}]
 
 
 def build(llm=None):
