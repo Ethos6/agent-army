@@ -24,7 +24,7 @@ def build(llm=None, namespace: str = "research"):
 
 {MEMORY_RULES}
 
-Workflow: recall the user's interests and previously shown papers -> `arxiv_search` with queries built from the
+Workflow: recall the user's interests, then `recall` "shown" with k=200 for every previously shown paper -> `arxiv_search` with queries built from the
 interests -> skip papers already shown -> present the best ones (title, link, why it matches) -> `remember`
 "shown: <arXiv id> <title>" for each one you present.""",
         tools=[*mem.tools(), arxiv_search],
