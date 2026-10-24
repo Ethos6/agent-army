@@ -1,7 +1,7 @@
 """Due Diligence Team
 
 An investment-committee workflow for a startup: a market analyst, a product and technology analyst
-and a risk analyst each research the company independently, then a partner writes the investment
+and a risk analyst research the company in turn, each building on the earlier sections, then a partner writes the investment
 memo with a clear recommendation and the questions to ask the founders.
 """
 from army import Agent, Pipeline
