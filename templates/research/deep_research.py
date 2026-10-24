@@ -31,7 +31,7 @@ and record findings as: `- <finding with numbers/dates> [URL]`. Note conflicting
 Use `calculate` for any derived numbers. Your final answer is the full evidence log grouped by sub-question.""",
         tools=[web_search, fetch_url, wikipedia, calculate],
         llm=llm,
-        max_steps=int(depth),
+        max_steps=max(1, int(float(depth))),
     )
     writer = Agent(
         "writer",

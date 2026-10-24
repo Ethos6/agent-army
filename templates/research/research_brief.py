@@ -36,5 +36,5 @@ Gaps, conflicts between sources, and what would change the conclusion.
 Numbered list of URLs actually fetched.""",
         tools=[fetch_url, calculate],
         llm=llm,
-        max_steps=int(max_sources) + 4,
+        max_steps=max(1, int(float(max_sources))) + 4,
     )
