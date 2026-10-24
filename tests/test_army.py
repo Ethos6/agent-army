@@ -153,7 +153,7 @@ class Data(unittest.TestCase):
 
     def test_feed_and_search_parsers(self):
         rss = '<rss><channel><item><title>Hello</title><link>https://x.test/1</link><pubDate>Mon</pubDate><description>&lt;p&gt;Body&lt;/p&gt;</description></item></channel></rss>'
-        with mock.patch("army.web.http_get", lambda *a, **k: rss):
+        with mock.patch("army.web.http_get_bytes", lambda *a, **k: (rss.encode(), None)):
             self.assertIn("https://x.test/1", web.read_feed(url="https://x.test/feed"))
         html = '<a class="result__a" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fa.test%2Fp">A <b>title</b></a> <a class="result__snippet" href="#">snip</a>'
         with mock.patch("army.web.http_get", lambda *a, **k: html):
@@ -315,3 +315,73 @@ class Chess(unittest.TestCase):
         out = cli.find("chess-arena").build(llm=Mock(script)).run("play").output
         self.assertIn("1. f2f3 e7e5 2. g2g4 d8h4", out)
         self.assertIn("Result: checkmate - Black wins", out)
+
+
+class Regressions(unittest.TestCase):
+    """One test per bug fixed, so it can't come back."""
+
+    def test_github_repo_urls(self):
+        for raw in ["psf/requests", "https://github.com/psf/requests", "github.com/psf/requests/",
+                    "https://github.com/psf/requests/tree/main/src", "https://github.com/psf/requests.git"]:
+            self.assertEqual(web._repo(raw), "psf/requests", raw)
+        with self.assertRaises(ValueError):
+            web._repo("not a repo")
+
+    def test_feed_item_without_title_and_atom_links(self):
+        rss = b"<rss><channel><item><link>https://x.test/1</link></item></channel></rss>"
+        with mock.patch("army.web.http_get_bytes", lambda *a, **k: (rss, None)):
+            self.assertIn("(untitled)", web.read_feed(url="u"))
+        atom = (b'<feed xmlns="http://www.w3.org/2005/Atom"><entry><title>T</title>'
+                b'<link rel="self" href="https://x.test/self"/><link rel="alternate" href="https://x.test/post"/></entry></feed>')
+        with mock.patch("army.web.http_get_bytes", lambda *a, **k: (atom, None)):
+            self.assertIn("https://x.test/post", web.read_feed(url="u"))
+
+    def test_feed_honours_declared_encoding(self):
+        xml = "<?xml version='1.0' encoding='ISO-8859-1'?><rss><channel><item><title>Café</title></item></channel></rss>"
+        with mock.patch("army.web.http_get_bytes", lambda *a, **k: (xml.encode("latin-1"), None)):
+            self.assertIn("Café", web.read_feed(url="u"))
+
+    def test_unknown_charset_falls_back_to_utf8(self):
+        self.assertEqual(web.decode("ok".encode(), "x-made-up-charset"), "ok")
+
+    def test_exported_skill_frontmatter_is_valid_with_colons(self):
+        with tempfile.TemporaryDirectory() as d:
+            cli.main(["export-skill", "code-reviewer", "--out", d])
+            head = (Path(d) / "code-reviewer" / "SKILL.md").read_text().split("---")[1]
+        desc_line = next(l for l in head.splitlines() if l.startswith("description:"))
+        self.assertEqual(json.loads(desc_line.split(":", 1)[1]), cli.find("code-reviewer").meta["description"])
+
+    def test_sql_missing_database_is_a_clear_error(self):
+        with self.assertRaises(FileNotFoundError):
+            sql_schema(db="examples/data/missing.db")
+
+    def test_chat_typeerror_is_not_retried_silently(self):
+        class Broken:
+            calls = 0
+
+            def chat(self, system, messages, **kw):
+                Broken.calls += 1
+                raise TypeError("bug inside the provider")
+
+        with self.assertRaises(TypeError):
+            Agent("t", "x", [calculate], llm=Broken()).run("q")
+        self.assertEqual(Broken.calls, 1)
+
+    def test_custom_llm_without_kwargs_still_works(self):
+        class Plain:
+            def chat(self, system, messages):
+                return '{"final": "fine"}'
+
+        self.assertEqual(Agent("t", "x", [calculate], llm=Plain()).run("q").output, "fine")
+
+    def test_mcp_timeout_does_not_swallow_next_reply(self):
+        server = MCPServer([sys.executable, str(ROOT / "tests" / "fake_mcp_server.py")], name="fake", timeout=0.5)
+        try:
+            server.list_tools()
+            with self.assertRaises(Exception):
+                server.call("slow", {"seconds": 1.5})  # times out; its late reply must be discarded
+            server.timeout = 10
+            time.sleep(1.5)
+            self.assertEqual(server.call("echo", {"text": "next"}), "next")
+        finally:
+            server.close()

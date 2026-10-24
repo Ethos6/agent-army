@@ -1,6 +1,7 @@
 """A tiny MCP server over stdio used by the test suite (no Node.js needed)."""
 import json
 import sys
+import time
 
 TOOLS = [
     {"name": "echo", "description": "Echo text back.", "inputSchema": {"type": "object", "properties": {"text": {"type": "string"}}, "required": ["text"]}},
@@ -20,6 +21,9 @@ for line in sys.stdin:
         args = params.get("arguments", {})
         if params["name"] == "echo":
             text = args.get("text", "")
+        elif params["name"] == "slow":
+            time.sleep(float(args.get("seconds", 2)))
+            text = "slow done"
         elif params["name"] == "add":
             text = str(args.get("a", 0) + args.get("b", 0))
         else:
