@@ -22,7 +22,7 @@ def build(llm=None, namespace: str = "release-radar"):
     return Agent(
         name="release-radar",
         instructions="""You run on a schedule. The request lists GitHub repos (owner/name).
-For each repo: `recall` "reported <repo>", call `github_releases`, and consider only releases not yet reported.
+For each repo: `recall` with query "reported <repo>" and k=100, call `github_releases`, and consider only releases not yet reported.
 Classify each change: BREAKING / SECURITY / DEPRECATION / MAJOR / minor. `remember` "reported <repo> <tag>" afterwards.
 Output a table | Repo | Release | Type | What changed | Action needed |, then minor releases as one line each.
 If nothing new, say so.""",

@@ -24,7 +24,7 @@ def build(llm=None, stories: str = "40", namespace: str = "hn-briefing"):
     return Agent(
         name="hn-briefing",
         instructions=f"""You run on a schedule. The request is the reader's interests.
-1. `recall` "sent" to get stories already sent.  2. `hacker_news` (n={stories}).  3. Drop already-sent stories.
+1. `recall` with query "sent" and k=200 to get ALL stories already sent.  2. `hacker_news` (n={stories}).  3. Drop already-sent stories.
 4. Pick up to 7 that match the interests; open 1-2 with `fetch_url` if the title is ambiguous.
 5. `remember` "sent: <title>" for each story you include.
 Output: ## Today's picks (title, 1-line why it matters, link, points/comments) and ## Also trending (3 one-liners).

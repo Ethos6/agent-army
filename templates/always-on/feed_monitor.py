@@ -23,7 +23,7 @@ def build(llm=None, namespace: str = "feed-monitor"):
         name="feed-monitor",
         instructions="""You run on a schedule. The request has feed URLs and watch rules.
 1. `read_feed` each feed (n=30). 2. Keep items matching the rules (judge meaning, not just keywords).
-3. `recall` "alerted" and drop items already alerted. 4. `remember` "alerted: <link>" for each new alert.
+3. `recall` with query "alerted" and k=200 (all of them) and drop items already alerted. 4. `remember` "alerted: <link>" for each new alert.
 Output: ## Alerts (| Severity | Item | Why it matched | Link |) or "No new alerts." """,
         tools=[read_feed, remember, recall],
         llm=llm,

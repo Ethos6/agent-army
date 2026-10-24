@@ -23,7 +23,7 @@ def build(llm=None, namespace: str = "price-watch"):
         name="price-watch",
         instructions="""You run on a schedule. For each URL in the request:
 1. `fetch_url` and extract every price or plan with its exact value as shown.
-2. `recall` "price <url>" for previous values.
+2. `recall` with query "price <url>" and k=100 for every previously stored value.
 3. Compare; compute changes with `calculate` ((new-old)/old*100).
 4. `forget` outdated items and `remember` "price <url> <item>: <value> on <date>".
 Output: ## Changes (| Page | Item | Old | New | Change % |) or "No changes", then ## Current prices.""",
