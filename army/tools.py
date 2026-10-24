@@ -267,21 +267,22 @@ def search_mailbox(path: str, query: str, n: int = 10) -> str:
     """Search an .mbox email export for messages matching words in from/subject/body."""
     import mailbox
 
-    terms = query.lower().split()
-    hits = []
+    terms = [t for t in re.findall(r"\w+", query.lower()) if len(t) > 2]
     box = mailbox.mbox(str(safe_path(path)), create=False)
     messages = list(box)
     box.close()
+    scored = []
     for msg in messages:
         body = msg.get_payload(decode=True) if not msg.is_multipart() else next(
             (p.get_payload(decode=True) for p in msg.walk() if p.get_content_type() == "text/plain"), b""
         )
         body = (body or b"").decode("utf-8", "replace")
         blob = f"{msg['from']} {msg['subject']} {body}".lower()
-        if all(t in blob for t in terms):
-            hits.append(f"From: {msg['from']}\nDate: {msg['date']}\nSubject: {msg['subject']}\n{body[:800]}")
-        if len(hits) >= int(n):
-            break
+        # rank by how many query words (or their stems) appear, so natural queries still match
+        score = sum(1 for t in terms if t in blob or t[:5] in blob)
+        if score:
+            scored.append((score, f"From: {msg['from']}\nDate: {msg['date']}\nSubject: {msg['subject']}\n{body[:800]}"))
+    hits = [text for _, text in sorted(scored, key=lambda x: -x[0])[: int(n)]]
     return "\n\n---\n\n".join(hits) or "no matching emails"
 
 
