@@ -1,0 +1,43 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [5 0 R 7 0 R] /Count 2 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+4 0 obj
+<< /Length 340 >>
+stream
+BT /F1 12 Tf 72 740 Td 16 TL (Annual Field Report 2026 \(sample\)) Tj T* () Tj T* (Summary: the pilot reduced delivery times by 18 percent) Tj T* (across 42 routes while fuel costs fell 7 percent.) Tj T* () Tj T* (Method: routes were re-planned nightly with an optimizer) Tj T* (and compared against the previous year's schedules.) Tj T* ET
+endstream
+endobj
+5 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 4 0 R >>
+endobj
+6 0 obj
+<< /Length 308 >>
+stream
+BT /F1 12 Tf 72 740 Td 16 TL (Risks and next steps) Tj T* () Tj T* (Main risk: driver adoption was uneven; two depots kept) Tj T* (manual planning for most of the quarter.) Tj T* () Tj T* (Next step: expand to 120 routes by June 2027 and add) Tj T* (live traffic data. Budget requested: 85,000 USD.) Tj T* ET
+endstream
+endobj
+7 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 6 0 R >>
+endobj
+xref
+0 8
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000121 00000 n 
+0000000191 00000 n 
+0000000582 00000 n 
+0000000708 00000 n 
+0000001067 00000 n 
+trailer
+<< /Size 8 /Root 1 0 R >>
+startxref
+1193
+%%EOF
