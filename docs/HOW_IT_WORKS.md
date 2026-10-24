@@ -1,15 +1,20 @@
 # How Agent Army works
 
-Agent Army is under 900 lines of Python. This page walks through each one.
+Agent Army is a small Python package (`army/`, standard library only) plus 109 agents in `templates/`, one file each.
 
 ```
 army/
-  llm.py     one chat() interface over every provider (stdlib HTTP only)
-  agent.py   Tool, @tool, Agent loop, Pipeline, parse_action
-  tools.py   sandboxed built-in tools
-  rag.py     BM25 retrieval with file:line citations
-  cli.py     army list | run | eval | validate | catalog | new
-templates/   one folder per agent: agent.toml + agent.py + README.md
+  llm.py        one chat() interface over every provider
+  agent.py      Tool, @tool, Agent loop, Pipeline, Panel, agent_tool, parse_action
+  tools.py      local tools: sandboxed files, CSV, SQLite, PDF, mailbox, transcripts, git, calculator
+  web.py        network tools: search, fetch, crawl, RSS, arXiv, Hacker News, GitHub, weather, FX, stocks, PyPI
+  rag.py        BM25 index, embeddings, vector and hybrid search, citations
+  memory.py     long-term memory store exposed as tools
+  mcp.py        Model Context Protocol client (stdio)
+  voice.py      speech-to-text and text-to-speech
+  playground.py `army serve` web UI
+  cli.py        army list | info | run | eval | validate | catalog | docs | new | export-skill | schedule | serve
+templates/<category>/<agent>.py
 ```
 
 ## 1. Models: `army/llm.py`
@@ -20,9 +25,7 @@ Every provider implements one method:
 def chat(self, system: str, messages: list[dict]) -> str
 ```
 
-`get_llm("provider:model")` returns the right adapter. If you pass nothing, it reads `ARMY_MODEL`. If that is not set either, it uses whichever API key it finds, and falls back to a local Ollama server when there are none. OpenAI, Ollama, DeepSeek, Groq, OpenRouter and any vLLM/LM Studio server all go through the same `OpenAICompatible` adapter. Anthropic and Gemini have small dedicated adapters.
-
-There are no SDKs, so there are no version conflicts. The `Mock` provider replays scripted replies, which is how the whole test suite runs offline.
+`get_llm("provider:model")` returns the right adapter. With no argument it reads `ARMY_MODEL`; if that isn't set, it uses whichever API key it finds, and falls back to a local Ollama server when there are none. OpenAI, Ollama, DeepSeek, Groq, OpenRouter and any vLLM or LM Studio server share one `OpenAICompatible` adapter; Anthropic and Gemini have small dedicated adapters. There are no SDKs, so there are no version conflicts. The `Mock` provider replays scripted replies, which is how the whole test suite runs offline.
 
 ## 2. The loop: `army/agent.py`
 
@@ -37,59 +40,68 @@ repeat up to max_steps:
 if steps run out: ask the model for its final answer
 ```
 
-**Why JSON instead of native function calling?** Native tool calling differs between vendors and is missing or unreliable on many open models. One plain-text JSON protocol works the same everywhere, so a template you test on Claude behaves the same on Llama. `parse_action` accepts raw JSON, JSON inside code fences, or JSON inside prose, and it ignores JSON objects that are not actions.
+**Why JSON instead of native function calling?** Native tool calling differs between vendors and is missing or unreliable on many open models. One plain-text JSON protocol behaves the same everywhere, so an agent you test on Claude behaves the same on Llama. `parse_action` accepts raw JSON, JSON in code fences, or JSON inside prose, and ignores JSON objects that aren't actions.
 
-**Tools** are typed Python functions:
+**Tools** are typed Python functions. `@tool` turns the signature and the first docstring line into the spec the model sees. Observations are capped so one huge page can't blow the context window.
+
+## 3. Teams
+
+| Pattern | Class | Example agents |
+| --- | --- | --- |
+| Sequential hand-off: each agent sees the request plus the previous output | `Pipeline(a, b, c)` | content-team, legal-team, deep-research |
+| Independent answers, then a judge | `Panel([a, b, c], judge)` | mixture-of-models, reader-panel, design-review-panel |
+| Manager delegates to workers as tools | `worker.as_tool("...")` / `agent_tool(...)` | finance-team, travel-team |
+| Custom control flow | any object with `.run(task)` | tic-tac-toe-arena, twenty-questions |
+
+Every agent in a team can use a different model, for example `debate-panel --opt models=anthropic:...,openai:...,gemini:...`.
+
+## 4. Tools and safety
+
+| Tool group | Safety measure |
+| --- | --- |
+| Files, CSV, PDF, mailbox, transcripts | Paths must resolve inside `ARMY_WORKDIR` (default: the current folder). `write_file` only writes to `outputs/`. |
+| SQLite | Opened in read-only mode, and only `SELECT` / `WITH` queries are accepted. |
+| `calculate` | Parses the expression's syntax tree and allows only numbers and arithmetic operators, with no `eval`. Huge exponents are refused. |
+| git tools | Fixed argument lists (no shell); refs that look like flags are rejected. |
+| Web tools | http(s) only, timeouts, read-size caps; scripts and navigation are stripped from pages. |
+| MCP | Servers run as subprocesses you name explicitly; agents are instructed to describe write actions before taking them. |
+| Memory | Plain JSON at `~/.army/memory/`, which you can read and edit; agents are told never to store secrets. |
+
+## 5. Retrieval: `army/rag.py`
+
+`index_folder()` splits text files into overlapping 12-line chunks that remember their file and line range. `search_tool(index)` exposes any index to an agent, and every passage comes back tagged like `[pricing.md:3-12]`.
+
+- **BM25Index**: keyword search; instant, with no API needed.
+- **VectorIndex**: embeddings from `ARMY_EMBED_MODEL` (OpenAI, Gemini or Ollama), computed lazily, kept in memory.
+- **HybridIndex**: reciprocal-rank fusion of both.
+
+## 6. Memory, MCP and voice
+
+- `Memory("travel").tools()` gives an agent `remember`, `recall` and `forget`. Several agents, even on different models, can share one store.
+- `MCPServer("npx -y <server>").tools()` gives an agent `<name>_list_tools` and `<name>_call`, so it can use any MCP server without knowing its tools in advance. The server starts only on first use.
+- `army.voice` adds `transcribe_audio` and `text_to_speech` over any OpenAI-compatible audio endpoint.
+
+## 7. Agent files and evals
 
 ```python
-@tool
-def fetch_url(url: str) -> str:
-    """Download a web page and return its title and readable text."""
+"""Docs Q&A                                   <- title (first line)
+
+What it does and why it can be trusted.      <- description (rendered into docs/TEMPLATES.md)
+"""
+META = {"category": "rag", "description": "...", "example": "..."}
+EVALS = [{"input": "...", "must_contain": ["30", "pricing.md"], "max_seconds": 120}]
+
+def build(llm=None, docs: str = "examples/knowledge-base"):   # keyword args become --opt options
+    return Agent(...)
 ```
 
-The decorator turns the signature and the first docstring line into the spec the model sees: `- fetch_url(url: str): Download a web page...`. Observations are capped at `max_observation_chars` so one large page cannot blow the context window.
+- `army validate` (run in CI) checks metadata, docstring, eval cases, folder/category match and a working `build()` for every agent.
+- `army eval [agent] [--category c] --model ...` runs the cases against a real model and exits non-zero on failure.
+- `army catalog` and `army docs` regenerate the README table and `docs/TEMPLATES.md` from the code, and CI fails if they drift.
 
-**Pipelines** chain agents. Each agent receives the original request plus the previous agent's output, and the `Result.steps` trace covers every agent, so you can see which one introduced a problem.
+## 8. Running agents everywhere
 
-## 3. Tools and safety: `army/tools.py`
-
-| Tool | Safety measure |
-| --- | --- |
-| `read_file`, `list_files`, CSV tools | Paths are resolved and must stay inside `ARMY_WORKDIR` (default: the current folder). `../../etc/passwd` raises `PermissionError`. |
-| `calculate` | Parses the expression's syntax tree and allows only numbers and arithmetic operators. No `eval`, and huge exponents are refused. |
-| `fetch_url` | http(s) only, 30 s timeout, 3 MB read cap. Scripts, styles and navigation are stripped. |
-| `git_diff` | Fixed argv (no shell) and rejects refs that look like flags. |
-
-## 4. Retrieval: `army/rag.py`
-
-`BM25Index.from_folder()` splits text files into overlapping 30-line chunks and remembers each chunk's file and line range. `search_tool(index)` exposes it to an agent, and every passage comes back tagged like `[pricing.md:3-12]`, so answers can be traced to the source. Indexing a few thousand files takes seconds and needs no database. If you want embeddings, write a tool with the same signature that calls your vector store.
-
-## 5. Templates and evals
-
-```toml
-# templates/docs-qa/agent.toml
-name = "docs-qa"
-title = "Docs Q&A Agent (RAG)"
-category = "rag"
-description = "..."
-example = "What is the refund window on the Pro plan?"
-
-[[evals]]
-input = "Who is the CEO's favourite football team?"
-must_contain = ["Not in the knowledge base"]   # refusing correctly is tested too
-max_seconds = 120
-```
-
-- `army validate` (runs in CI) checks each manifest for required fields, a folder name that matches, at least one eval, a README, and a `build()` that succeeds.
-- `army eval [template] --model ...` runs the cases against a real model and exits non-zero on failure, so you can gate a model upgrade on it.
-- `army catalog` regenerates the README table from the manifests, so the docs cannot drift from the code.
-
-## Writing a new template
-
-```bash
-army new churn-risk
-# edit templates/churn-risk/agent.py, agent.toml and README.md
-army validate && python -m unittest discover -s tests
-army eval churn-risk --model ollama:llama3.2
-army catalog
-```
+- **CLI:** `army run <agent> "<task>" --model ... --opt key=value -v`
+- **Playground:** `army serve` opens a local web UI listing every agent, with a step trace for each run.
+- **Schedules:** `army schedule <agent> "<task>" --every 60 --webhook https://hooks...` posts each report to Slack, Discord or Teams incoming webhooks (or `--out report.md`).
+- **Coding agents:** `army export-skill <agent|all>` writes SKILL.md files that coding agents can load as skills.
