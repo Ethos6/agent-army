@@ -13,7 +13,7 @@ META = {
     "description": "Predicts customer questions, answers them from your docs with citations, and lists content gaps.",
     "example": "Build an FAQ from examples/knowledge-base",
 }
-EVALS = [{"input": "Build an FAQ from examples/knowledge-base", "must_contain": ["saved", "Content gaps"], "max_seconds": 240}]
+EVALS = [{"input": "Build an FAQ from examples/knowledge-base", "must_contain": ["outputs/", "Content gaps"], "max_seconds": 240}]
 
 
 def build(llm=None, docs: str = "examples/knowledge-base"):

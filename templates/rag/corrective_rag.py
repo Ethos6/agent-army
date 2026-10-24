@@ -18,7 +18,8 @@ EVALS = [{"input": "How quickly do revoked API keys stop working?", "must_contai
 
 def build(llm=None, docs: str = "examples/knowledge-base", web_fallback: str = "yes"):
     index = index_folder(docs)
-    tools = [search_tool(index)] + ([web_search] if web_fallback == "yes" else [])
+    use_web = str(web_fallback).strip().lower() in {"yes", "y", "true", "1", "on"}
+    tools = [search_tool(index)] + ([web_search] if use_web else [])
     return Agent(
         name="corrective-rag",
         instructions="""You are a careful retrieval agent that corrects itself.
