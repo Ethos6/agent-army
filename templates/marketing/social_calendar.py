@@ -12,7 +12,7 @@ META = {
     "description": "A month of channel-native posts across content pillars, written and saved as an importable CSV.",
     "example": "4-week calendar for a yoga studio on Instagram and LinkedIn, goal: more class sign-ups",
 }
-EVALS = [{"input": "2-week calendar for a coffee roaster on Instagram", "must_contain": ["Week 1", "saved"], "max_seconds": 240}]
+EVALS = [{"input": "2-week calendar for a coffee roaster on Instagram", "must_contain": ["Week 1", "outputs/"], "max_seconds": 240}]
 
 
 def build(llm=None):
