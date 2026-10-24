@@ -41,18 +41,22 @@ class _TextExtractor(HTMLParser):
     def handle_starttag(self, tag, attrs):
         if tag in self.SKIP:
             self._skip += 1
-        self._in_title = tag == "title"
+        if tag == "br":  # void element: no end tag ever arrives
+            self.parts.append("\n")
+        # only the document's own <title>, not <title> inside skipped <svg> icons
+        self._in_title = tag == "title" and not self._skip and not self.title
 
     def handle_endtag(self, tag):
         if tag in self.SKIP and self._skip:
             self._skip -= 1
-        if tag in {"p", "div", "li", "h1", "h2", "h3", "h4", "tr", "br"}:
+        if tag in {"p", "div", "li", "h1", "h2", "h3", "h4", "h5", "h6", "tr", "section", "article"}:
             self.parts.append("\n")
-        self._in_title = False
+        if tag == "title":
+            self._in_title = False
 
     def handle_data(self, data):
         if self._in_title:
-            self.title += data.strip()
+            self.title += (" " if self.title else "") + data.strip()
         elif not self._skip and data.strip():
             self.parts.append(data.strip() + " ")
 
@@ -103,13 +107,33 @@ _OPS = {
 }
 
 
+MAX_BITS = 4000  # results bigger than ~1200 digits are refused instead of hanging or exhausting memory
+
+
+def _check(value):
+    if isinstance(value, int) and value.bit_length() > MAX_BITS:
+        raise ValueError("result too large")
+    return value
+
+
 def _eval(node):
-    if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
-        return node.value
+    if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)) and not isinstance(node.value, bool):
+        return _check(node.value)
     if isinstance(node, ast.BinOp) and type(node.op) in _OPS:
-        if isinstance(node.op, ast.Pow) and abs(_eval(node.right)) > 100:
-            raise ValueError("exponent too large")
-        return _OPS[type(node.op)](_eval(node.left), _eval(node.right))
+        left, right = _eval(node.left), _eval(node.right)  # each operand evaluated exactly once
+        if isinstance(node.op, ast.Pow):
+            if abs(right) > 1000:
+                raise ValueError("exponent too large")
+            if isinstance(left, int) and isinstance(right, int) and right > 0 and abs(left) > 1 \
+                    and right * abs(left).bit_length() > MAX_BITS:
+                raise ValueError("result too large")
+        if isinstance(node.op, (ast.Mult, ast.LShift)) and isinstance(left, int) and isinstance(right, int) \
+                and abs(left).bit_length() + abs(right).bit_length() > MAX_BITS:
+            raise ValueError("result too large")
+        try:
+            return _check(_OPS[type(node.op)](left, right))
+        except OverflowError:
+            raise ValueError("result too large") from None
     if isinstance(node, ast.UnaryOp) and type(node.op) in _OPS:
         return _OPS[type(node.op)](_eval(node.operand))
     raise ValueError("only numbers and + - * / // % ** are allowed")
@@ -123,7 +147,11 @@ def calculate(expression: str) -> str:
 
 def _read_rows(path: str) -> list[dict]:
     with open(safe_path(path), newline="", encoding="utf-8-sig") as f:
-        return list(csv.DictReader(f))
+        rows = list(csv.DictReader(f, restval=""))
+    for r in rows:  # rows with extra fields put them under a None key; keep them but give it a name
+        if None in r:
+            r["(extra)"] = ",".join(r.pop(None))
+    return rows
 
 
 def _num(v):
@@ -139,17 +167,19 @@ def describe_csv(path: str) -> str:
     rows = _read_rows(path)
     if not rows:
         return "CSV is empty."
-    lines = [f"rows: {len(rows)}", f"columns: {', '.join(rows[0])}", "sample:"]
+    lines = [f"rows: {len(rows)}", f"columns: {', '.join(c for c in rows[0] if c != '(extra)')}", "sample:"]
     lines += [f"  {r}" for r in rows[:3]]
-    for col in rows[0]:
-        nums = [n for n in (_num(r[col]) for r in rows) if n is not None]
+    for col in [c for c in rows[0] if c != "(extra)"]:
+        nums = [n for n in (_num(r.get(col, "")) for r in rows) if n is not None]
         if len(nums) >= max(1, len(rows) // 2):
             lines.append(
                 f"{col}: min={min(nums):g} max={max(nums):g} mean={statistics.fmean(nums):,.2f} sum={sum(nums):g}"
             )
         else:
-            distinct = {r[col] for r in rows}
+            distinct = {str(r.get(col, "")) for r in rows}
             lines.append(f"{col}: {len(distinct)} distinct values, e.g. {sorted(distinct)[:5]}")
+    if any("(extra)" in r for r in rows):
+        lines.append(f"warning: {sum('(extra)' in r for r in rows)} rows have more fields than the header")
     return "\n".join(lines)
 
 
@@ -168,30 +198,57 @@ def aggregate_csv(path: str, value_column: str, group_by: str = "", op: str = "s
     return "\n".join(f"{k}: {v:,.2f}" for k, v in out) or "no numeric values found"
 
 
+def _git(args: list[str], timeout: int = 30) -> str:
+    """Run git inside the sandbox only: never in a parent repository that contains ARMY_WORKDIR."""
+    root = workdir()
+    env = {**os.environ, "GIT_CEILING_DIRECTORIES": str(root.parent)}  # don't search above the workdir
+    top = subprocess.run(["git", "rev-parse", "--show-toplevel"], cwd=root, capture_output=True, text=True, env=env, timeout=timeout)
+    if top.returncode != 0:
+        raise RuntimeError("ARMY_WORKDIR is not the root of a git repository")
+    if Path(top.stdout.strip()).resolve() != root:
+        raise PermissionError("ARMY_WORKDIR must be the repository root for git tools")
+    out = subprocess.run(["git", *args], cwd=root, capture_output=True, text=True, env=env, timeout=timeout)
+    return out.stdout or out.stderr
+
+
+def _ref(value: str) -> str:
+    value = str(value).strip()
+    if not value or value.startswith("-") or ":" in value or any(c in value for c in "\n\r\x00"):
+        raise ValueError(f"invalid git ref: {value!r}")
+    return value
+
+
 @tool
 def git_diff(ref: str = "HEAD") -> str:
     """Show the git diff of the working tree against a ref (default HEAD)."""
-    if ref.startswith("-"):
-        raise ValueError("invalid ref")
-    out = subprocess.run(
-        ["git", "diff", "--no-color", ref, "--"], cwd=workdir(), capture_output=True, text=True, timeout=30
-    )
-    return (out.stdout or out.stderr or "(no changes)")[:20000]
+    return (_git(["diff", "--no-color", _ref(ref), "--", "."]) or "(no changes)")[:20000]
 
 
 def outputs_dir() -> Path:
     d = workdir() / "outputs"
+    if d.is_symlink():
+        raise PermissionError("outputs/ is a symlink; refusing to write through it")
     d.mkdir(parents=True, exist_ok=True)
     return d
+
+
+def output_path(filename: str) -> Path:
+    """A file path inside outputs/ that can't escape it (no directories, dotfiles or symlinks)."""
+    name = Path(str(filename)).name
+    if not name or name.startswith(".") or name in {".", ".."}:
+        raise ValueError("give a plain file name like report.md")
+    p = outputs_dir() / name
+    if p.is_symlink():
+        raise PermissionError(f"{name} is a symlink; refusing to write through it")
+    if p.resolve().parent != (workdir() / "outputs").resolve():
+        raise PermissionError("refusing to write outside outputs/")
+    return p
 
 
 @tool
 def write_file(filename: str, content: str) -> str:
     """Save text (Markdown, HTML, CSV, JSON...) to the outputs/ folder and return its path."""
-    name = Path(filename).name
-    if not name or name.startswith("."):
-        raise ValueError("give a plain file name like report.md")
-    p = outputs_dir() / name
+    p = output_path(filename)
     p.write_text(content)
     return f"saved {p.relative_to(workdir())} ({len(content):,} chars)"
 
@@ -200,31 +257,23 @@ def write_file(filename: str, content: str) -> str:
 def git_log(path: str = ".", n: int = 20) -> str:
     """Recent git commits touching a path: hash, date, author and message."""
     safe_path(path)
-    out = subprocess.run(
-        ["git", "log", f"-{int(n)}", "--date=short", "--pretty=format:%h %ad %an: %s", "--", path],
-        cwd=workdir(), capture_output=True, text=True, timeout=30,
-    )
-    return out.stdout or out.stderr or "(no history)"
+    count = max(1, min(int(n), 200))
+    return _git(["log", f"-{count}", "--date=short", "--pretty=format:%h %ad %an: %s", "--", path]) or "(no history)"
 
 
 @tool
 def git_blame(path: str, start: int = 1, end: int = 40) -> str:
     """Who last changed each line of a file and in which commit (line range)."""
     safe_path(path)
-    out = subprocess.run(
-        ["git", "blame", "--date=short", "-L", f"{int(start)},{int(end)}", "--", path],
-        cwd=workdir(), capture_output=True, text=True, timeout=30,
-    )
-    return (out.stdout or out.stderr)[:15000]
+    first, last = max(1, int(start)), max(1, int(end))
+    return _git(["blame", "--date=short", "-L", f"{first},{max(first, last)}", "--", path])[:15000]
 
 
 @tool
 def git_show(commit: str) -> str:
     """Show a commit's message and diff."""
-    if commit.startswith("-"):
-        raise ValueError("invalid commit")
-    out = subprocess.run(["git", "show", "--stat", "--patch", commit, "--"], cwd=workdir(), capture_output=True, text=True, timeout=30)
-    return (out.stdout or out.stderr)[:15000]
+    # "rev:path" would let git print arbitrary files from history, so only plain revisions are accepted
+    return _git(["show", "--stat", "--patch", _ref(commit), "--", "."])[:15000]
 
 
 def _sqlite(db: str):
@@ -240,8 +289,10 @@ def _sqlite(db: str):
 def sql_schema(db: str) -> str:
     """List the tables and columns of a SQLite database (read-only)."""
     con = _sqlite(db)
-    rows = con.execute("SELECT name, sql FROM sqlite_master WHERE type IN ('table','view') ORDER BY name").fetchall()
-    con.close()
+    try:
+        rows = con.execute("SELECT name, sql FROM sqlite_master WHERE type IN ('table','view') ORDER BY name").fetchall()
+    finally:
+        con.close()
     return "\n\n".join(f"{n}:\n{s}" for n, s in rows) or "no tables"
 
 
@@ -251,10 +302,12 @@ def sql_query(db: str, sql: str) -> str:
     if not sql.lstrip().lower().startswith(("select", "with")):
         raise PermissionError("only SELECT / WITH queries are allowed")
     con = _sqlite(db)
-    cur = con.execute(sql)
-    cols = [d[0] for d in cur.description or []]
-    rows = cur.fetchmany(50)
-    con.close()
+    try:
+        cur = con.execute(sql)
+        cols = [d[0] for d in cur.description or []]
+        rows = cur.fetchmany(50)
+    finally:
+        con.close()
     return " | ".join(cols) + "\n" + "\n".join(" | ".join(map(str, r)) for r in rows)
 
 
@@ -300,9 +353,9 @@ def read_transcript(path: str) -> str:
     out, stamp = [], ""
     for line in text.splitlines():
         line = line.strip()
-        m = re.match(r"(\d{2}):(\d{2}):(\d{2})[.,]\d{3}\s+-->", line)
+        m = re.match(r"(?:(\d+):)?(\d{2}):(\d{2})[.,]\d{3}\s+-->", line)
         if m:
-            h, mi, s = map(int, m.groups())
+            h, mi, s = int(m.group(1) or 0), int(m.group(2)), int(m.group(3))
             stamp = f"[{h * 60 + mi:02d}:{s:02d}]"
         elif line and not line.isdigit() and line != "WEBVTT":
             out.append(f"{stamp} {line}" if stamp else line)

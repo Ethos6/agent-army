@@ -103,7 +103,7 @@ def parse_action(text: str) -> dict | None:
 
 
 def _as_text(value: Any) -> str:
-    return value if isinstance(value, str) else json.dumps(value, indent=2, ensure_ascii=False)
+    return value if isinstance(value, str) else json.dumps(value, indent=2, ensure_ascii=False, default=str)
 
 
 class Agent:
@@ -184,13 +184,19 @@ class Agent:
         messages.append({"role": "user", "content": 'Step limit reached. Reply now with {"final": "<answer>"}.'})
         reply = self._chat(messages)
         action = parse_action(reply)
-        output = _as_text(action["final"]) if action and "final" in action else reply.strip()
+        if action and "final" in action:
+            output = _as_text(action["final"])
+        elif action and action.get("tool"):  # still asking for tools: don't hand a raw tool call back as the answer
+            last = next((s.content for s in reversed(steps) if s.kind == "tool"), "")
+            output = f"Stopped: step limit ({self.max_steps}) reached before a final answer.\nLast tool result:\n{last[:2000]}"
+        else:
+            output = reply.strip()
         steps.append(Step(self.name, "final", output))
         return Result(output, steps)
 
 
 class Pipeline:
-    """Run agents in sequence; each one sees the original request plus the previous agent's output."""
+    """Run agents in sequence; each one sees the original request plus every earlier agent's output."""
 
     def __init__(self, *agents: Agent, name: str = "pipeline"):
         if not agents:
@@ -204,17 +210,18 @@ class Pipeline:
 
     def run(self, task: str, verbose: bool = False) -> Result:
         steps: list[Step] = []
-        output, previous = task, None
+        outputs: list[tuple[str, str]] = []
         for agent in self.agents:
-            prompt = task if previous is None else (
-                f"Original request:\n{task}\n\nOutput from {previous}:\n{output}"
+            # every stage sees the original request and ALL earlier stages' work, not just the last one
+            prompt = task if not outputs else f"Original request:\n{task}\n\n" + "\n\n".join(
+                f"Output from {name}:\n{out}" for name, out in outputs
             )
             if verbose:
                 print(f"-> {agent.name}")
             result = agent.run(prompt, verbose=verbose)
             steps += result.steps
-            output, previous = result.output, agent.name
-        return Result(output, steps)
+            outputs.append((agent.name, result.output))
+        return Result(outputs[-1][1], steps)
 
 
 def agent_tool(agent: "Agent | Pipeline", description: str, name: str | None = None) -> Tool:
@@ -253,3 +260,6 @@ class Panel:
             print(f"-> {self.judge.name}")
         final = self.judge.run(f"Task:\n{task}\n\nIndependent answers:\n\n" + "\n\n".join(answers), verbose=verbose)
         return Result(final.output, steps + final.steps)
+
+
+Panel.as_tool = lambda self, description, name=None: agent_tool(self, description, name)  # type: ignore[attr-defined]

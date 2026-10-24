@@ -75,20 +75,27 @@ def _tavily(query: str, n: int) -> list[dict]:
 
 def search(query: str, n: int = 6) -> list[dict]:
     """Web search with graceful fallback: Tavily -> Brave -> DuckDuckGo -> Wikipedia."""
-    errors = []
+    errors, tried = [], 0
     for env, fn in (("TAVILY_API_KEY", _tavily), ("BRAVE_API_KEY", _brave), (None, _ddg)):
         if env and not os.environ.get(env):
             continue
+        tried += 1
         try:
             hits = fn(query, n)
             if hits:
                 return hits
         except Exception as e:  # try the next backend
             errors.append(f"{fn.__name__}: {e}")
-    hits = _wiki_search(query, n)
-    if hits:
-        return hits
-    raise RuntimeError("all search backends failed: " + "; ".join(errors))
+    tried += 1
+    try:
+        hits = _wiki_search(query, n)
+        if hits:
+            return hits
+    except Exception as e:
+        errors.append(f"wikipedia: {e}")
+    if len(errors) == tried:  # every backend errored out: report why instead of "no results"
+        raise RuntimeError("all search backends failed: " + "; ".join(errors))
+    return []  # backends worked but found nothing
 
 
 @tool
@@ -161,7 +168,7 @@ def _repo(repo: str) -> str:
     """Accept owner/name or any github.com URL (including /tree/..., /blob/..., .git)."""
     path = re.sub(r"^(https?://)?(www\.)?github\.com/", "", repo.strip()).strip("/")
     parts = path.split("/")
-    if len(parts) < 2 or not all(re.fullmatch(r"[\w.-]+", x) for x in parts[:2]):
+    if len(parts) < 2 or not all(re.fullmatch(r"[\w.-]+", x) and x not in {".", ".."} for x in parts[:2]):
         raise ValueError("repo must look like owner/name or a github.com URL")
     return f"{parts[0]}/{parts[1].removesuffix('.git')}"
 
@@ -187,7 +194,7 @@ def github_repo(repo: str) -> str:
 @tool
 def github_file(repo: str, path: str) -> str:
     """Read one file from a GitHub repo (owner/name) by path."""
-    data = _gh(f"repos/{_repo(repo)}/contents/{path.lstrip('/')}")
+    data = _gh(f"repos/{_repo(repo)}/contents/{urllib.parse.quote(path.strip('/'), safe='/')}")
     if isinstance(data, list):  # a directory, not a file
         return "This is a directory. Entries:\n" + "\n".join(f"{x['type']}: {x['path']}" for x in data)
     if data.get("content"):
@@ -198,8 +205,11 @@ def github_file(repo: str, path: str) -> str:
 @tool
 def github_releases(repo: str, n: int = 5) -> str:
     """Latest releases of a GitHub repo (owner/name) with dates and release notes."""
-    rel = _gh(f"repos/{_repo(repo)}/releases?per_page={int(n)}")
-    return "\n\n".join(f"## {x.get('name') or x['tag_name']} ({x['published_at'][:10]})\n{(x.get('body') or '')[:2500]}" for x in rel) or "no releases"
+    rel = _gh(f"repos/{_repo(repo)}/releases?per_page={max(1, min(int(n), 50))}")
+    return "\n\n".join(
+        f"## {x.get('name') or x.get('tag_name')} ({(x.get('published_at') or 'draft')[:10]})\n{(x.get('body') or '')[:2500]}"
+        for x in rel if not x.get("draft")
+    ) or "no releases"
 
 
 # ---------------------------------------------------------------- weather, money, markets
@@ -215,8 +225,9 @@ def weather(place: str) -> str:
         f"&latitude={g['latitude']}&longitude={g['longitude']}"
         "&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max"
     )["daily"]
+    fmt = lambda v, spec: "?" if v is None else format(v, spec)  # the API returns null for missing values
     rows = [
-        f"{d}: {lo:.0f}-{hi:.0f}C, rain {p}%"
+        f"{d}: {fmt(lo, '.0f')}-{fmt(hi, '.0f')}C, rain {fmt(p, '')}%"
         for d, hi, lo, p in zip(f["time"], f["temperature_2m_max"], f["temperature_2m_min"], f["precipitation_probability_max"])
     ]
     return f"{g['name']}, {g.get('country', '')}\n" + "\n".join(rows)
@@ -276,7 +287,12 @@ def read_feed(url: str, n: int = 10) -> str:
         link = (alt.get("href") or alt.text or "") if alt is not None else ""
         date = get("pubDate", "published", "updated")
         summary = get("description", "summary", "content")
-        text = html_to_text(summary.text or "")[1] if summary is not None else ""
+        if summary is None:
+            text = ""
+        elif len(summary):  # Atom type="xhtml": the content is child elements, not text
+            text = " ".join(" ".join(summary.itertext()).split())
+        else:
+            text = html_to_text(summary.text or "")[1]
         title_el = get("title")
         title = (title_el.text or "").strip() if title_el is not None else "(untitled)"
         items.append(f"- {title} ({((date.text or '') if date is not None else '')[:25]})\n  {link or ''}\n  {text[:400]}")
@@ -287,7 +303,7 @@ def read_feed(url: str, n: int = 10) -> str:
 
 @tool
 def crawl_site(url: str, max_pages: int = 6) -> str:
-    """Read a website: the start page plus up to max_pages linked pages on the same domain."""
+    """Read a website: up to max_pages pages in total (the start page first, then linked pages on the same domain)."""
     start = urllib.parse.urlparse(url)
     queue, seen, out = [url], set(), []
     while queue and len(seen) < int(max_pages):
@@ -305,6 +321,6 @@ def crawl_site(url: str, max_pages: int = 6) -> str:
         for href in re.findall(r'href="([^"#]+)"', html):
             nxt = urllib.parse.urljoin(u, href)
             p = urllib.parse.urlparse(nxt)
-            if p.netloc == start.netloc and p.scheme in ("http", "https") and not re.search(r"\.(png|jpe?g|gif|svg|pdf|zip|css|js)$", p.path):
+            if p.netloc.lower() == start.netloc.lower() and p.scheme in ("http", "https") and not re.search(r"\.(png|jpe?g|gif|svg|pdf|zip|css|js)$", p.path):
                 queue.append(nxt)
     return "\n\n".join(out)

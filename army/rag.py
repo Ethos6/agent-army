@@ -10,12 +10,23 @@ from pathlib import Path
 from .agent import Tool, tool
 
 TEXT_SUFFIXES = {".md", ".txt", ".rst", ".py", ".js", ".ts", ".html", ".csv", ".json", ".toml", ".yaml", ".yml"}
-_WORD = re.compile(r"[a-z0-9]+")
+_WORD = re.compile(r"\w+")
+_CJK = re.compile(r"[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uac00-\ud7af]")
 STOP = set("a an and are as at be by for from has have in is it of on or that the to was were will with".split())
 
 
 def tokenize(text: str) -> list[str]:
-    return [w for w in _WORD.findall(text.lower()) if w not in STOP]
+    """Lower-cased Unicode words; Chinese/Japanese/Korean runs (no spaces) become character bigrams."""
+    out = []
+    for w in _WORD.findall(text.lower()):
+        if w in STOP:
+            continue
+        if _CJK.search(w):
+            chars = [c for c in w if not c.isspace()]
+            out += chars if len(chars) == 1 else ["".join(chars[i:i + 2]) for i in range(len(chars) - 1)]
+        else:
+            out.append(w)
+    return out
 
 
 @dataclass

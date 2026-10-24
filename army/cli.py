@@ -17,6 +17,10 @@ from .llm import get_llm
 
 ROOT = Path(__file__).resolve().parent.parent
 
+def _first(*paths: Path) -> Path:
+    return next((p for p in paths if p.is_dir()), paths[0])
+
+
 CATEGORIES = {
     "starter": "Starter agents",
     "research": "Research agents",
@@ -39,7 +43,9 @@ REQUIRED_META = ("category", "description", "example")
 
 
 def templates_dir() -> Path:
-    return Path(os.environ.get("ARMY_TEMPLATES", ROOT / "templates"))
+    if os.environ.get("ARMY_TEMPLATES"):
+        return Path(os.environ["ARMY_TEMPLATES"])
+    return _first(ROOT / "templates", Path.cwd() / "templates")  # works for editable and regular installs
 
 
 @dataclass
@@ -276,6 +282,8 @@ def _sync(path: Path, new: str, check: bool, label: str):
 def cmd_catalog(args):
     readme = ROOT / "README.md"
     text = readme.read_text()
+    if START not in text or END not in text or text.index(START) > text.index(END):
+        sys.exit(f"README.md must contain {START} followed by {END}; refusing to rewrite it.")
     head, _, rest = text.partition(START)
     _, _, tail = rest.partition(END)
     _sync(readme, f"{head}{START}\n{render_catalog()}\n{END}{tail}", args.check, "README catalog")
@@ -327,9 +335,10 @@ def cmd_export_skill(args):
     out_root = Path(args.out)
     for t in targets:
         agent = t.build()
+        parts = [*getattr(agent, "agents", ()), *getattr(agent, "members", ()), *([agent.judge] if hasattr(agent, "judge") else [])]
         instructions = getattr(agent, "instructions", None) or "\n\n".join(
-            f"## Step: {a.name}\n{a.instructions}" for a in getattr(agent, "agents", getattr(agent, "members", []))
-        )
+            f"## Step: {a.name}\n{a.instructions}" for a in parts if getattr(a, "instructions", None)
+        ) or (inspect.getdoc(t.module) or "")
         folder = out_root / t.name
         folder.mkdir(parents=True, exist_ok=True)
         desc = json.dumps(t.meta["description"].replace("\n", " "))  # quoted: descriptions may contain ": "
@@ -353,12 +362,20 @@ def cmd_schedule(args):
             output = f"run failed: {type(e).__name__}: {e}"
         report = f"# {t.title} - {started}\n\n{output}\n"
         if args.out:
-            with open(args.out, "a") as f:
-                f.write(report + "\n")
-        if args.webhook:  # Slack/Discord/Teams-style incoming webhooks accept {"text": ...}
-            req = urllib.request.Request(args.webhook, data=json.dumps({"text": report[:39000], "content": report[:1900]}).encode(),
-                                         headers={"content-type": "application/json"})
-            urllib.request.urlopen(req, timeout=30).read()
+            try:
+                with open(args.out, "a") as f:
+                    f.write(report + "\n")
+            except OSError as e:
+                print(f"[schedule] could not write {args.out}: {e}", file=sys.stderr)
+        if args.webhook:  # Slack/Discord/Teams-style incoming webhooks accept {"text": ...} / {"content": ...}
+            try:
+                req = urllib.request.Request(
+                    args.webhook, data=json.dumps({"text": report[:39000], "content": report[:1900]}).encode(),
+                    headers={"content-type": "application/json", "user-agent": "agent-army (https://github.com/Ethos6/agent-army)"},
+                )
+                urllib.request.urlopen(req, timeout=30).read()
+            except Exception as e:  # one failed delivery must not stop an always-on runner
+                print(f"[schedule] webhook delivery failed: {type(e).__name__}: {e}", file=sys.stderr)
         if not args.out and not args.webhook:
             print(report)
         runs += 1

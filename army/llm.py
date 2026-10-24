@@ -115,7 +115,10 @@ class Gemini(LLM):
             {"systemInstruction": {"parts": [{"text": system}]}, "contents": contents},
             {"x-goog-api-key": _key("GEMINI_API_KEY")},
         )
-        parts = r.get("candidates", [{}])[0].get("content", {}).get("parts", [])
+        candidates = r.get("candidates") or []
+        if not candidates:
+            raise LLMError(f"Gemini returned no answer (prompt blocked?): {r.get('promptFeedback')}")
+        parts = candidates[0].get("content", {}).get("parts", [])
         return "".join(p.get("text", "") for p in parts)
 
 
@@ -134,12 +137,12 @@ class Mock(LLM):
         return self.responses.pop(0) if self.responses else '{"final": "mock answer"}'
 
 
-_OPENAI_LIKE = {
-    "openai": (os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1"), "OPENAI_API_KEY"),
-    "ollama": (os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434/v1"), None),
-    "deepseek": ("https://api.deepseek.com/v1", "DEEPSEEK_API_KEY"),
-    "groq": ("https://api.groq.com/openai/v1", "GROQ_API_KEY"),
-    "openrouter": ("https://openrouter.ai/api/v1", "OPENROUTER_API_KEY"),
+_OPENAI_LIKE = {  # provider: (base URL, env var that overrides it, key env var); env is read at call time
+    "openai": ("https://api.openai.com/v1", "OPENAI_BASE_URL", "OPENAI_API_KEY"),
+    "ollama": ("http://localhost:11434/v1", "OLLAMA_BASE_URL", None),
+    "deepseek": ("https://api.deepseek.com/v1", None, "DEEPSEEK_API_KEY"),
+    "groq": ("https://api.groq.com/openai/v1", None, "GROQ_API_KEY"),
+    "openrouter": ("https://openrouter.ai/api/v1", None, "OPENROUTER_API_KEY"),
 }
 
 
@@ -170,6 +173,7 @@ def get_llm(spec: str | None = None) -> LLM:
     if provider == "gemini":
         return Gemini(model)
     if provider in _OPENAI_LIKE:
-        base, key_env = _OPENAI_LIKE[provider]
+        default_base, base_env, key_env = _OPENAI_LIKE[provider]
+        base = os.environ.get(base_env, default_base) if base_env else default_base
         return OpenAICompatible(model, provider, base, key_env)
     raise LLMError(f"Unknown provider '{provider}'. Use one of: anthropic, gemini, mock, {', '.join(_OPENAI_LIKE)}")

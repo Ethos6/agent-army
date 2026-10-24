@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import secrets
 import threading
 import time
 import traceback
@@ -49,7 +50,7 @@ $('opts').value=Object.keys(cur.options).length?JSON.stringify(cur.options):'';$
 $('q').oninput=draw;
 $('go').onclick=async()=>{$('go').disabled=true;$('out').textContent='Running...';$('trace').textContent='';
 let opts={};try{opts=$('opts').value?JSON.parse($('opts').value):{}}catch(e){$('out').textContent='Options must be JSON';$('go').disabled=false;return}
-const r=await fetch('/api/run',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({template:cur.name,task:$('task').value,model:$('model').value,options:opts})});
+const r=await fetch('/api/run',{method:'POST',headers:{'content-type':'application/json','x-army-token':TOKEN},body:JSON.stringify({template:cur.name,task:$('task').value,model:$('model').value,options:opts})});
 const d=await r.json();$('out').textContent=d.error||d.output;
 $('trace').textContent=(d.steps||[]).map(s=>`[${s.agent}] ${s.kind}${s.tool?' '+s.tool+'('+JSON.stringify(s.args)+')':''}\n${s.content.slice(0,600)}`).join('\n\n')+(d.seconds?`\n\n${d.seconds}s`:'');
 $('go').disabled=false};
@@ -68,6 +69,9 @@ def serve(host: str = "127.0.0.1", port: int = 8765):
         for t in sorted(load_templates(), key=lambda t: list(CATEGORIES).index(t.meta["category"]))
     ]
     lock = threading.Lock()
+    token = secrets.token_urlsafe(24)  # only pages served by this process know it
+    page = PAGE.replace("<script>", f"<script>const TOKEN={json.dumps(token)};", 1).encode()
+    allowed_hosts = {f"{h}:{port}" for h in ("127.0.0.1", "localhost", "[::1]", host)}
 
     class Handler(BaseHTTPRequestHandler):
         def _send(self, code: int, body: bytes, ctype: str):
@@ -83,17 +87,34 @@ def serve(host: str = "127.0.0.1", port: int = 8765):
         def log_message(self, *a):
             pass
 
+        def _host_ok(self) -> bool:
+            # Rejecting unknown Host headers blocks DNS-rebinding pages from talking to the playground.
+            if self.headers.get("host", "") in allowed_hosts:
+                return True
+            self._send(403, b"forbidden host", "text/plain")
+            return False
+
         def do_GET(self):
+            if not self._host_ok():
+                return
             if self.path == "/":
-                self._send(200, PAGE.encode(), "text/html; charset=utf-8")
+                self._send(200, page, "text/html; charset=utf-8")
             elif self.path == "/api/templates":
                 self._json(catalog)
             else:
                 self._send(404, b"not found", "text/plain")
 
         def do_POST(self):
+            if not self._host_ok():
+                return
             if self.path != "/api/run":
                 return self._send(404, b"not found", "text/plain")
+            # Other websites can't read the token or send a custom header without a CORS preflight,
+            # so they can't make the playground run agents (and spend your API keys).
+            if not secrets.compare_digest(self.headers.get("x-army-token", ""), token):
+                return self._json({"error": "missing or invalid playground token; reload the page"}, 403)
+            if not self.headers.get("content-type", "").startswith("application/json"):
+                return self._json({"error": "content-type must be application/json"}, 415)
             try:
                 req = json.loads(self.rfile.read(int(self.headers.get("content-length", 0))))
                 t = find(req["template"])

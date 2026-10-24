@@ -47,6 +47,9 @@ class Position:
     @classmethod
     def from_fen(cls, fen: str = START) -> "Position":
         parts = fen.split()
+        if len(parts) < 2:
+            raise ValueError("FEN needs at least a board and a side to move")
+        parts += ["-", "-", "0", "1"][len(parts) - 2:]  # castling, en passant and counters are optional
         board = []
         for ch in parts[0]:
             if ch.isdigit():

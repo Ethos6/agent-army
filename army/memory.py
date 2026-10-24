@@ -10,7 +10,10 @@ from __future__ import annotations
 import json
 import math
 import os
+import tempfile
+import threading
 import time
+from contextlib import contextmanager
 from collections import Counter
 from pathlib import Path
 
@@ -23,15 +26,47 @@ def army_home() -> Path:
 
 
 class Memory:
+    _locks: dict[str, threading.Lock] = {}
+
     def __init__(self, namespace: str = "default", path: str | Path | None = None):
         self.path = Path(path) if path else army_home() / "memory" / f"{namespace}.json"
-        self.items: list[dict] = json.loads(self.path.read_text()) if self.path.exists() else []
+        self._lock = Memory._locks.setdefault(str(self.path.resolve()), threading.Lock())
+        self.items: list[dict] = self._load()
+
+    @contextmanager
+    def _exclusive(self):
+        """Thread lock plus an OS file lock, so separate processes sharing a memory don't overwrite each other."""
+        with self._lock:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            with open(str(self.path) + ".lock", "a") as lf:
+                try:
+                    import fcntl
+
+                    fcntl.flock(lf, fcntl.LOCK_EX)
+                except ImportError:  # Windows: the thread lock still protects one process
+                    pass
+                yield
+
+    def _load(self) -> list[dict]:
+        try:
+            return json.loads(self.path.read_text()) if self.path.exists() else []
+        except json.JSONDecodeError:
+            return []
 
     def _save(self):
+        # write to a temp file and rename, so a crash or a concurrent reader never sees a half-written file
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.path.write_text(json.dumps(self.items, indent=1, ensure_ascii=False))
+        fd, tmp = tempfile.mkstemp(dir=self.path.parent, prefix=".mem-", suffix=".json")
+        with os.fdopen(fd, "w") as f:
+            json.dump(self.items, f, indent=1, ensure_ascii=False)
+        os.replace(tmp, self.path)
 
     def add(self, text: str, kind: str = "fact") -> int:
+        with self._exclusive():
+            self.items = self._load()  # pick up what other agents sharing this memory wrote
+            return self._add(text, kind)
+
+    def _add(self, text: str, kind: str) -> int:
         text = text.strip()
         for item in self.items:  # update instead of duplicating
             if item["text"].lower() == text.lower():
@@ -44,6 +79,7 @@ class Memory:
         return new_id
 
     def search(self, query: str, k: int = 5) -> list[dict]:
+        self.items = self._load()
         terms = tokenize(query)
         if not terms:
             return sorted(self.items, key=lambda i: -i["ts"])[:k]
@@ -59,10 +95,12 @@ class Memory:
         return [i for _, i in sorted(scored, key=lambda x: -x[0])[:k]]
 
     def remove(self, item_id: int) -> bool:
-        before = len(self.items)
-        self.items = [i for i in self.items if i["id"] != int(item_id)]
-        self._save()
-        return len(self.items) < before
+        with self._exclusive():
+            self.items = self._load()
+            before = len(self.items)
+            self.items = [i for i in self.items if i["id"] != int(item_id)]
+            self._save()
+            return len(self.items) < before
 
     def tools(self) -> list[Tool]:
         mem = self

@@ -33,46 +33,63 @@ class MCPServer:
         self.proc: subprocess.Popen | None = None
         self._id = 0
         self._lock = threading.Lock()
+        self._start_lock = threading.Lock()  # concurrent first calls must start exactly one server
+        self._ready = False
+        self._waiting: dict[int, queue.Queue] = {}
         self._tools: list[dict] | None = None
 
     # -- transport
     def _start(self):
-        if self.proc and self.proc.poll() is None:
+        with self._start_lock:
+            if self.proc and self.proc.poll() is None and self._ready:
+                return
+            if self.proc:  # dead, or alive but never finished initializing: start fresh
+                self.close()
+            try:
+                self.proc = subprocess.Popen(
+                    self.command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                    text=True, bufsize=1, env=self.env,
+                )
+            except FileNotFoundError:
+                raise MCPError(f"cannot start MCP server: {self.command[0]} not found") from None
+            # One reader thread per process routes each reply to the request waiting for it,
+            # so a request that timed out can never swallow the reply meant for the next one.
+            self._waiting = {}
+            threading.Thread(target=self._read_loop, args=(self.proc, self._waiting), daemon=True).start()
+            try:
+                self._request("initialize", {
+                    "protocolVersion": PROTOCOL_VERSION,
+                    "capabilities": {},
+                    "clientInfo": {"name": "agent-army", "version": "1"},
+                })
+                self._notify("notifications/initialized")
+            except Exception:
+                self.close()  # never leave a half-initialized server behind
+                raise
+            self._ready = True
+
+    def _read_loop(self, proc, waiting: dict):
+        try:
+            for line in proc.stdout:
+                self._route(line, waiting)
+        except (ValueError, OSError):  # stdout closed by close()
+            pass
+        for box in list(waiting.values()):  # server exited: wake everyone waiting on THIS process
+            box.put({"error": {"message": "server exited"}})
+
+    @staticmethod
+    def _route(line: str, waiting: dict):
+        line = line.strip()
+        if not line:
             return
         try:
-            self.proc = subprocess.Popen(
-                self.command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
-                text=True, bufsize=1, env=self.env,
-            )
-        except FileNotFoundError:
-            raise MCPError(f"cannot start MCP server: {self.command[0]} not found") from None
-        # One reader thread for the life of the process routes each reply to the request waiting for it,
-        # so a request that timed out can never swallow the reply meant for the next one.
-        self._waiting: dict[int, queue.Queue] = {}
-        self._reader = threading.Thread(target=self._read_loop, args=(self.proc,), daemon=True)
-        self._reader.start()
-        self._request("initialize", {
-            "protocolVersion": PROTOCOL_VERSION,
-            "capabilities": {},
-            "clientInfo": {"name": "agent-army", "version": "1"},
-        })
-        self._notify("notifications/initialized")
-
-    def _read_loop(self, proc):
-        for line in proc.stdout:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                msg = json.loads(line)
-            except json.JSONDecodeError:
-                continue  # servers sometimes log to stdout
-            if isinstance(msg, dict) and ("result" in msg or "error" in msg):
-                box = self._waiting.pop(msg.get("id"), None)
-                if box:
-                    box.put(msg)
-        for box in list(self._waiting.values()):  # server exited: wake everyone waiting
-            box.put({"error": {"message": "server exited"}})
+            msg = json.loads(line)
+        except json.JSONDecodeError:
+            return  # servers sometimes log to stdout
+        if isinstance(msg, dict) and ("result" in msg or "error" in msg):
+            box = waiting.pop(msg.get("id"), None)
+            if box:
+                box.put(msg)
 
     def _write(self, msg: dict):
         try:
@@ -89,12 +106,17 @@ class MCPServer:
             self._id += 1
             rid = self._id
         box: queue.Queue = queue.Queue(maxsize=1)
-        self._waiting[rid] = box
-        self._write({"jsonrpc": "2.0", "id": rid, "method": method, "params": params or {}})
+        waiting = self._waiting
+        waiting[rid] = box
+        try:
+            self._write({"jsonrpc": "2.0", "id": rid, "method": method, "params": params or {}})
+        except MCPError:
+            waiting.pop(rid, None)
+            raise
         try:
             result = box.get(timeout=self.timeout)
         except queue.Empty:
-            self._waiting.pop(rid, None)
+            waiting.pop(rid, None)
             raise MCPError(f"{self.name}: no response to {method} within {self.timeout}s") from None
         if "error" in result:
             raise MCPError(f"{self.name}: {result['error'].get('message')}")
@@ -117,6 +139,7 @@ class MCPServer:
         return ("ERROR: " if r.get("isError") else "") + text
 
     def close(self):
+        self._ready = False
         if self.proc:
             if self.proc.poll() is None:
                 self.proc.terminate()
