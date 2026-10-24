@@ -332,11 +332,12 @@ def cmd_export_skill(args):
         )
         folder = out_root / t.name
         folder.mkdir(parents=True, exist_ok=True)
-        desc = t.meta["description"].replace("\n", " ")
+        desc = json.dumps(t.meta["description"].replace("\n", " "))  # quoted: descriptions may contain ": "
         (folder / "SKILL.md").write_text(
             f"---\nname: {t.name}\ndescription: {desc}\n---\n\n# {t.title}\n\n{t.about}\n\n"
             f"## How to do this task\n\n{instructions}\n\n"
-            f"## Run it as a standalone agent\n\n```bash\npip install agent-army\narmy run {t.name} \"<task>\"\n```\n"
+            f"## Run it as a standalone agent\n\n```bash\ngit clone https://github.com/Ethos6/agent-army.git && cd agent-army\n"
+            f"pip install -e .\narmy run {t.name} \"<task>\"\n```\n"
         )
     print(f"exported {len(targets)} skill(s) to {out_root}/")
 

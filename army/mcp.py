@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import os
+import queue
 import shlex
 import subprocess
 import threading
@@ -45,6 +46,11 @@ class MCPServer:
             )
         except FileNotFoundError:
             raise MCPError(f"cannot start MCP server: {self.command[0]} not found") from None
+        # One reader thread for the life of the process routes each reply to the request waiting for it,
+        # so a request that timed out can never swallow the reply meant for the next one.
+        self._waiting: dict[int, queue.Queue] = {}
+        self._reader = threading.Thread(target=self._read_loop, args=(self.proc,), daemon=True)
+        self._reader.start()
         self._request("initialize", {
             "protocolVersion": PROTOCOL_VERSION,
             "capabilities": {},
@@ -52,9 +58,28 @@ class MCPServer:
         })
         self._notify("notifications/initialized")
 
+    def _read_loop(self, proc):
+        for line in proc.stdout:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                msg = json.loads(line)
+            except json.JSONDecodeError:
+                continue  # servers sometimes log to stdout
+            if isinstance(msg, dict) and ("result" in msg or "error" in msg):
+                box = self._waiting.pop(msg.get("id"), None)
+                if box:
+                    box.put(msg)
+        for box in list(self._waiting.values()):  # server exited: wake everyone waiting
+            box.put({"error": {"message": "server exited"}})
+
     def _write(self, msg: dict):
-        self.proc.stdin.write(json.dumps(msg) + "\n")
-        self.proc.stdin.flush()
+        try:
+            self.proc.stdin.write(json.dumps(msg) + "\n")
+            self.proc.stdin.flush()
+        except (BrokenPipeError, OSError):
+            raise MCPError(f"{self.name}: server is not running") from None
 
     def _notify(self, method: str, params: dict | None = None):
         self._write({"jsonrpc": "2.0", "method": method, **({"params": params} if params else {})})
@@ -63,30 +88,17 @@ class MCPServer:
         with self._lock:
             self._id += 1
             rid = self._id
-            self._write({"jsonrpc": "2.0", "id": rid, "method": method, "params": params or {}})
-            result: dict = {}
-
-            def read():
-                for line in self.proc.stdout:
-                    line = line.strip()
-                    if not line:
-                        continue
-                    try:
-                        msg = json.loads(line)
-                    except json.JSONDecodeError:
-                        continue  # servers sometimes log to stdout
-                    if msg.get("id") == rid and ("result" in msg or "error" in msg):
-                        result.update(msg)
-                        return
-
-            t = threading.Thread(target=read, daemon=True)
-            t.start()
-            t.join(self.timeout)
-            if not result:
-                raise MCPError(f"{self.name}: no response to {method} within {self.timeout}s")
-            if "error" in result:
-                raise MCPError(f"{self.name}: {result['error'].get('message')}")
-            return result["result"]
+        box: queue.Queue = queue.Queue(maxsize=1)
+        self._waiting[rid] = box
+        self._write({"jsonrpc": "2.0", "id": rid, "method": method, "params": params or {}})
+        try:
+            result = box.get(timeout=self.timeout)
+        except queue.Empty:
+            self._waiting.pop(rid, None)
+            raise MCPError(f"{self.name}: no response to {method} within {self.timeout}s") from None
+        if "error" in result:
+            raise MCPError(f"{self.name}: {result['error'].get('message')}")
+        return result["result"]
 
     # -- API
     def list_tools(self) -> list[dict]:

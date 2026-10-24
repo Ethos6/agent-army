@@ -16,10 +16,21 @@ from .tools import html_to_text
 UA = {"user-agent": "Mozilla/5.0 (agent-army)"}
 
 
-def http_get(url: str, headers: dict | None = None, timeout: int = 30, limit: int = 3_000_000) -> str:
+def http_get_bytes(url: str, headers: dict | None = None, timeout: int = 30, limit: int = 3_000_000) -> tuple[bytes, str | None]:
     req = urllib.request.Request(url, headers={**UA, **(headers or {})})
     with urllib.request.urlopen(req, timeout=timeout) as resp:
-        return resp.read(limit).decode(resp.headers.get_content_charset() or "utf-8", "replace")
+        return resp.read(limit), resp.headers.get_content_charset()
+
+
+def decode(raw: bytes, charset: str | None) -> str:
+    try:
+        return raw.decode(charset or "utf-8", "replace")
+    except LookupError:  # server sent an unknown charset name
+        return raw.decode("utf-8", "replace")
+
+
+def http_get(url: str, headers: dict | None = None, timeout: int = 30, limit: int = 3_000_000) -> str:
+    return decode(*http_get_bytes(url, headers, timeout, limit))
 
 
 def http_json(url: str, headers: dict | None = None, data: dict | None = None, timeout: int = 30):
@@ -147,10 +158,12 @@ def _gh(path: str):
 
 
 def _repo(repo: str) -> str:
-    m = re.search(r"([\w.-]+/[\w.-]+?)(?:\.git)?/?$", repo.replace("https://github.com/", ""))
-    if not m:
-        raise ValueError("repo must look like owner/name")
-    return m.group(1)
+    """Accept owner/name or any github.com URL (including /tree/..., /blob/..., .git)."""
+    path = re.sub(r"^(https?://)?(www\.)?github\.com/", "", repo.strip()).strip("/")
+    parts = path.split("/")
+    if len(parts) < 2 or not all(re.fullmatch(r"[\w.-]+", x) for x in parts[:2]):
+        raise ValueError("repo must look like owner/name or a github.com URL")
+    return f"{parts[0]}/{parts[1].removesuffix('.git')}"
 
 
 @tool
@@ -175,7 +188,11 @@ def github_repo(repo: str) -> str:
 def github_file(repo: str, path: str) -> str:
     """Read one file from a GitHub repo (owner/name) by path."""
     data = _gh(f"repos/{_repo(repo)}/contents/{path.lstrip('/')}")
-    return base64.b64decode(data["content"]).decode("utf-8", "replace")[:20000]
+    if isinstance(data, list):  # a directory, not a file
+        return "This is a directory. Entries:\n" + "\n".join(f"{x['type']}: {x['path']}" for x in data)
+    if data.get("content"):
+        return base64.b64decode(data["content"]).decode("utf-8", "replace")[:20000]
+    return http_get(data["download_url"])[:20000]  # files over 1 MB come without inline content
 
 
 @tool
@@ -246,19 +263,23 @@ def pypi_package(name: str) -> str:
 @tool
 def read_feed(url: str, n: int = 10) -> str:
     """Read an RSS or Atom feed (blogs, newsletters, news). Returns latest items with date, link and summary."""
-    root = ET.fromstring(http_get(url).encode())
+    raw, _ = http_get_bytes(url)
+    root = ET.fromstring(raw)  # bytes, so the XML declaration's own encoding is honoured
     items = []
     for el in root.iter():
         tag = el.tag.split("}")[-1]
         if tag not in ("item", "entry"):
             continue
         get = lambda *names: next((c for c in el if c.tag.split("}")[-1] in names), None)
-        link_el = get("link")
-        link = (link_el.get("href") or link_el.text) if link_el is not None else ""
+        links = [c for c in el if c.tag.split("}")[-1] == "link"]
+        alt = next((c for c in links if c.get("rel") in (None, "alternate")), links[0] if links else None)
+        link = (alt.get("href") or alt.text or "") if alt is not None else ""
         date = get("pubDate", "published", "updated")
         summary = get("description", "summary", "content")
         text = html_to_text(summary.text or "")[1] if summary is not None else ""
-        items.append(f"- {(get('title').text or '').strip()} ({(date.text if date is not None else '')[:25]})\n  {link}\n  {text[:400]}")
+        title_el = get("title")
+        title = (title_el.text or "").strip() if title_el is not None else "(untitled)"
+        items.append(f"- {title} ({((date.text or '') if date is not None else '')[:25]})\n  {link or ''}\n  {text[:400]}")
         if len(items) >= int(n):
             break
     return "\n".join(items) or "no items"

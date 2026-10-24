@@ -148,10 +148,12 @@ class Agent:
             return f"Error: {type(e).__name__}: {e}"
 
     def _chat(self, messages: list[dict]) -> str:
-        try:  # ask for strict JSON when the model supports it (agents with tools speak JSON)
+        # Ask for strict JSON when the model supports it (agents with tools speak JSON). Custom LLM classes
+        # written as chat(system, messages) without **kwargs still work: we only pass the flag if accepted.
+        params = inspect.signature(self.llm.chat).parameters
+        if "json_mode" in params or any(p.kind is inspect.Parameter.VAR_KEYWORD for p in params.values()):
             return self.llm.chat(self.system_prompt, messages, json_mode=bool(self.tools))
-        except TypeError:  # custom LLM classes written without **kwargs
-            return self.llm.chat(self.system_prompt, messages)
+        return self.llm.chat(self.system_prompt, messages)
 
     def run(self, task: str, verbose: bool = False) -> Result:
         messages = [{"role": "user", "content": task}]

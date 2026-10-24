@@ -71,7 +71,11 @@ def fetch_url(url: str) -> str:
         raise ValueError("url must start with http:// or https://")
     req = urllib.request.Request(url, headers={"user-agent": "Mozilla/5.0 (agent-army)"})
     with urllib.request.urlopen(req, timeout=30) as resp:
-        raw = resp.read(3_000_000).decode(resp.headers.get_content_charset() or "utf-8", "replace")
+        data, charset = resp.read(3_000_000), resp.headers.get_content_charset()
+    try:
+        raw = data.decode(charset or "utf-8", "replace")
+    except LookupError:  # unknown charset name from the server
+        raw = data.decode("utf-8", "replace")
     title, text = html_to_text(raw)
     return f"URL: {url}\nTITLE: {title}\n\n{text[:12000]}"
 
@@ -226,7 +230,10 @@ def git_show(commit: str) -> str:
 def _sqlite(db: str):
     import sqlite3
 
-    return sqlite3.connect(f"file:{safe_path(db)}?mode=ro", uri=True)
+    path = safe_path(db)
+    if not path.is_file():
+        raise FileNotFoundError(f"database not found: {db}")
+    return sqlite3.connect(path.as_uri() + "?mode=ro", uri=True)  # as_uri escapes '?' and '#' in paths
 
 
 @tool
