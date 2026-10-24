@@ -1,6 +1,6 @@
 # How Agent Army works
 
-Agent Army is a small Python package (`army/`, standard library only) plus 109 agents in `templates/`, one file each.
+Agent Army is a small Python package (`army/`, standard library only) plus 110 agents in `templates/`, one file each.
 
 ```
 army/

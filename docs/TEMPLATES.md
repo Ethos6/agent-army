@@ -1335,6 +1335,22 @@ army run voice-support "Answer the question in examples/talks/question.mp3"
 
 ## Game-playing agents
 
+### Chess Arena
+
+Two AI players, optionally different models, play a full game of chess refereed by a built-in rules
+engine verified with perft: castling, en passant, promotion, check, checkmate, stalemate, the
+50-move rule, threefold repetition and insufficient material are all enforced. Each turn a player
+sees the board, the FEN and the list of legal moves; illegal answers get three retries before a
+random legal move is played and the illegal attempt is logged. You get the move list and the final
+result in PGN-like form.
+
+```bash
+army run chess-arena "Play a game"
+```
+
+**Options:** `white_model` (default ``), `black_model` (default ``), `max_plies` (default `200`), `seed` (default ``), `fen` (default ``)  
+[source](../templates/games/chess_arena.py)
+
 ### Connect Four Arena
 
 Two AI players drop discs into a 7x6 grid; the engine validates moves, detects four-in-a-row in any
