@@ -19,7 +19,7 @@ EVALS = [{"input": "Couple, budget 500k, low HOA; examples/data/listings.csv", "
 def build(llm=None, rate: str = "6.5"):
     analyst = Agent("data-analyst", f"""`describe_csv` and `read_file` the listings. For each: price per sqft, estimated monthly
 payment (20% down, {rate}% 30-year fixed: P*r*(1+r)^n/((1+r)^n-1)), plus HOA. Compute everything with `calculate`.
-Output one table.""", tools=[describe_csv, read_file, calculate], llm=llm, max_steps=16)
+Output one table.""", tools=[describe_csv, read_file, calculate], llm=llm, max_steps=30)
     research = Agent("neighbourhood-researcher", """For each neighbourhood in the table, use `web_search` for schools, commute,
 amenities and price trends. Add 2-3 sourced bullets per area.""", tools=[web_search], llm=llm, max_steps=10)
     advisor = Agent("advisor", """Rank the homes for the buyer's needs:
