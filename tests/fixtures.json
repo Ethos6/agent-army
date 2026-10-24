@@ -1,0 +1,134 @@
+{
+ "geo": {
+  "results": [
+   {
+    "id": 2267057,
+    "name": "Lisbon",
+    "latitude": 38.72509,
+    "longitude": -9.1498,
+    "country": "Portugal"
+   }
+  ]
+ },
+ "forecast": {
+  "daily": {
+   "time": [
+    "2026-10-24",
+    "2026-10-25",
+    "2026-10-26",
+    "2026-10-27",
+    "2026-10-28",
+    "2026-10-29",
+    "2026-10-30"
+   ],
+   "temperature_2m_max": [
+    22.1,
+    23,
+    21.8,
+    21.8,
+    25.4,
+    24.8,
+    23.2
+   ],
+   "temperature_2m_min": [
+    9.8,
+    10.9,
+    11.8,
+    12.8,
+    12.7,
+    16.3,
+    18
+   ],
+   "precipitation_probability_max": [
+    0,
+    0,
+    0,
+    6,
+    2,
+    0,
+    12
+   ]
+  }
+ },
+ "fx": {
+  "result": "success",
+  "time_last_update_utc": "Sat, 24 Oct 2026 00:02:31 +0000",
+  "rates": {
+   "USD": 1,
+   "INR": 95.036492,
+   "EUR": 0.892784
+  }
+ },
+ "wiki_search": {
+  "query": {
+   "search": [
+    {
+     "ns": 0,
+     "title": "Retrieval-augmented generation",
+     "pageid": 75229858,
+     "snippet": "<span class=\"searchmatch\">Retrieval</span>-<span class=\"searchmatch\">augmented</span> generation (RAG) is a technique"
+    }
+   ]
+  }
+ },
+ "wiki_extract": {
+  "query": {
+   "pages": {
+    "75229858": {
+     "pageid": 75229858,
+     "ns": 0,
+     "title": "Retrieval-augmented generation",
+     "extract": "Retrieval-augmented generation (RAG) is a technique that enables large language models to retrieve and incorporate new information."
+    }
+   }
+  }
+ },
+ "yahoo": {
+  "chart": {
+   "result": [
+    {
+     "meta": {
+      "currency": "USD",
+      "symbol": "AAPL",
+      "exchangeName": "NMS"
+     },
+     "timestamp": [
+      1792416600,
+      1792503000,
+      1792589400,
+      1792675800,
+      1792762200
+     ],
+     "indicators": {
+      "quote": [
+       {
+        "close": [
+         342.94000244140625,
+         339.5,
+         343.989990234375,
+         348.2200012207031,
+         347.7300109863281
+        ]
+       }
+      ]
+     }
+    }
+   ],
+   "error": null
+  }
+ },
+ "hn_ids": [
+  50212065,
+  50216791
+ ],
+ "hn_item": {
+  "by": "Jowsey",
+  "descendants": 461,
+  "id": 50212065,
+  "score": 900,
+  "title": "Example story",
+  "type": "story",
+  "url": "https://example.com/story"
+ },
+ "arxiv": "<?xml version='1.0' encoding='UTF-8'?>\n<feed xmlns=\"http://www.w3.org/2005/Atom\"><entry><id>http://arxiv.org/abs/2511.22858v1</id><title>RAG System for Supporting Japanese Litigation Procedures</title><summary>This study discusses the essential components of a RAG-based LLM system.</summary><published>2025-11-28T03:28:27Z</published><author><name>Yuya Ishihara</name></author><author><name>Atsushi Keyaki</name></author></entry></feed>"
+}
