@@ -1,0 +1,7 @@
+id,city,neighborhood,price,bedrooms,bathrooms,sqft,year_built,hoa_monthly,days_on_market
+L1,Austin,Mueller,525000,3,2,1720,2014,95,12
+L2,Austin,Hyde Park,689000,3,2,1580,1938,0,41
+L3,Austin,East Riverside,410000,2,2,1150,2019,240,7
+L4,Austin,Circle C,615000,4,3,2450,2003,60,26
+L5,Austin,Crestview,575000,3,2,1490,1956,0,18
+L6,Austin,Domain,455000,2,2,1080,2021,310,33

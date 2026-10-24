@@ -1,0 +1,19 @@
+date,category,description,amount
+2026-09-01,Housing,Rent,1450
+2026-09-02,Groceries,Supermarket,86.40
+2026-09-03,Transport,Metro card,95
+2026-09-05,Dining,Dinner out,64.20
+2026-09-07,Subscriptions,Streaming bundle,32.99
+2026-09-08,Groceries,Farmers market,41.10
+2026-09-10,Utilities,Electricity,78.35
+2026-09-12,Dining,Lunch with team,23.50
+2026-09-14,Shopping,Running shoes,129.00
+2026-09-15,Debt,Credit card payment,300
+2026-09-16,Groceries,Supermarket,92.75
+2026-09-18,Subscriptions,Cloud storage,9.99
+2026-09-20,Dining,Food delivery,38.60
+2026-09-21,Health,Gym membership,45
+2026-09-24,Groceries,Supermarket,77.30
+2026-09-26,Dining,Food delivery,41.25
+2026-09-28,Savings,Transfer to savings,250
+2026-09-30,Income,Salary,-4200

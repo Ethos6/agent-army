@@ -1,0 +1,7 @@
+requests==2.19.0
+dataclasses==0.8
+typing
+urllib3
+flask>=2.0
+flask>=2.2
+six==1.16.0
