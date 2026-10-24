@@ -24,5 +24,7 @@ jobs:
         run: python -m unittest discover -s tests -v
       - name: Validate every template
         run: army validate
-      - name: README catalog is up to date
-        run: army catalog --check
+      - name: Generated README catalog and docs are up to date
+        run: |
+          army catalog --check
+          army docs --check
