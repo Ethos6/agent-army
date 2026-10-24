@@ -21,7 +21,7 @@
 <p align="center">
   <img alt="Python" src="https://img.shields.io/badge/python-3.11%2B-3776AB">
   <img alt="Dependencies" src="https://img.shields.io/badge/dependencies-0-22D3EE">
-  <img alt="Agents" src="https://img.shields.io/badge/agents-109-F97316">
+  <img alt="Agents" src="https://img.shields.io/badge/agents-110-F97316">
   <img alt="License" src="https://img.shields.io/badge/license-MIT-8B5CF6">
   <a href="https://github.com/Ethos6/agent-army/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/Ethos6/agent-army/actions/workflows/ci.yml/badge.svg"></a>
 </p>
@@ -38,7 +38,7 @@ Agent Army is one system:
 | ------------------ | ------------------------------------------ | --------------------------------------------------------------------- |
 | Setup              | A new `requirements.txt` per project       | `pip install -e .` once, **zero** third-party dependencies            |
 | Switching models   | Rewrite the code                           | `--model ollama:llama3.2` or `--model anthropic:claude-sonnet-4-5`    |
-| Running an agent   | A different command each time              | `army run <agent> "<task>"` for all 109                               |
+| Running an agent   | A different command each time              | `army run <agent> "<task>"` for all 110                               |
 | A UI               | A different web app per project            | `army serve`: one playground for every agent                          |
 | Scheduling         | Write your own cron + Slack glue           | `army schedule <agent> "<task>" --every 1440 --webhook <url>`         |
 | Quality            | "Works on my machine"                      | Eval cases in every agent, offline tests and CI on every change       |
@@ -57,11 +57,11 @@ pip install -e .
 export ANTHROPIC_API_KEY=...      # or OPENAI_API_KEY / GEMINI_API_KEY / DEEPSEEK_API_KEY / GROQ_API_KEY
 # ...or set no key at all: it falls back to a local Ollama model
 
-army list                                     # all 109 agents by category
+army list                                     # all 110 agents by category
 army run csv-analyst "Which channel drove the most revenue in examples/data/campaigns.csv?" -v
 army run deep-research "When will solid-state EV batteries reach mass production?"
 army run legal-team "Review examples/contracts/mutual_nda.md; we are the Recipient"
-army run tic-tac-toe-arena "play" --opt x_model=openai:gpt-4o-mini --opt o_model=ollama:llama3.2
+army run chess-arena "play" --opt white_model=openai:gpt-4o-mini --opt black_model=ollama:llama3.2
 army serve                                    # web playground at http://127.0.0.1:8765
 ```
 
@@ -83,7 +83,7 @@ print(agent.run("Find the current tagline of python.org and tell me how many wor
 ## The army
 
 <!-- catalog:start -->
-**109 templates in 16 categories.** Full docs: [docs/TEMPLATES.md](docs/TEMPLATES.md)
+**110 templates in 16 categories.** Full docs: [docs/TEMPLATES.md](docs/TEMPLATES.md)
 
 
 ### Starter agents (14)
@@ -236,10 +236,11 @@ print(agent.run("Find the current tagline of python.org and tell me how many wor
 | [**Voice Notes to Brief**](templates/voice/voice_notes_brief.py) `voice-notes-brief` | Turns a rambling voice memo into decisions, open questions and actions; inferences clearly marked. |
 | [**Voice Support Agent**](templates/voice/voice_support.py) `voice-support` | Transcribes a caller's question, answers from your docs with citations, and replies as audio. |
 
-### Game-playing agents (3)
+### Game-playing agents (4)
 
 | Template | What it does |
 |---|---|
+| [**Chess Arena**](templates/games/chess_arena.py) `chess-arena` | Two models play real chess, refereed by a perft-verified rules engine; full move log and result. |
 | [**Connect Four Arena**](templates/games/connect_four_arena.py) `connect-four-arena` | Two models play Connect Four with engine-validated moves and win detection; full game log. |
 | [**Tic-Tac-Toe Arena**](templates/games/tic_tac_toe_arena.py) `tic-tac-toe-arena` | Two models play tic-tac-toe with engine-validated moves; full move log and result. |
 | [**Twenty Questions**](templates/games/twenty_questions.py) `twenty-questions` | A host model hides a secret; a guesser model narrows it down with 20 yes/no questions. |
@@ -326,10 +327,20 @@ Optional: `TAVILY_API_KEY` or `BRAVE_API_KEY` for stronger web search, `GITHUB_T
 
 ## Quality gates
 
+| Check | Where | What it proves |
+| --- | --- | --- |
+| 47 offline unit tests | every push, Python 3.11-3.13 | the agent loop, teams, memory, RAG, SQL safety, MCP protocol, playground, chess rules (perft) and parsers for every public API |
+| `army validate` | every push | all 110 agents have metadata, docs, eval cases and a working `build()` |
+| Live web job | every push + weekly | every web tool against the real service (search, Wikipedia, weather, FX, arXiv, Hacker News, GitHub, PyPI, RSS) |
+| Live MCP job | every push + weekly | real MCP servers started with `npx` and driven through `army.mcp` |
+| [Evals workflow](.github/workflows/evals.yml) | on demand + weekly | agents' `EVALS` against a **real model**: a free local Ollama model by default, or any hosted model whose key you add as a repo secret |
+
+Run them yourself:
+
 ```bash
-python -m unittest discover -s tests -v   # offline: every agent built and run against a scripted model
-army validate                             # every agent has metadata, docs, eval cases and a working build()
-army eval --category rag                  # run eval cases against your configured model
+python -m unittest discover -s tests -v                   # offline
+ARMY_LIVE=1 python -m unittest tests.test_live -v          # real public APIs
+army eval docs-qa --model ollama:qwen2.5:3b --ignore-time  # real model
 ```
 
 ## Roadmap

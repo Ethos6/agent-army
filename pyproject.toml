@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "agent-army"
 version = "0.2.0"
-description = "109 production-grade AI agents on one tiny, model-agnostic core. Zero dependencies."
+description = "110 production-grade AI agents on one tiny, model-agnostic core. Zero dependencies."
 readme = "README.md"
 license = { text = "MIT" }
 authors = [{ name = "Agent Army contributors" }]
