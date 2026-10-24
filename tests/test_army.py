@@ -252,3 +252,43 @@ class LiveFormats(unittest.TestCase):
             out = web.arxiv_search(query="rag", n=1)
         self.assertIn("RAG System for Supporting Japanese Litigation Procedures (2025-11-28)", out)
         self.assertIn("Yuya Ishihara, Atsushi Keyaki", out)
+
+
+class Chess(unittest.TestCase):
+    """Standard perft node counts: the usual proof that castling, en passant, promotion and pins are correct."""
+
+    def test_perft(self):
+        from army.chess import START, Position, perft
+
+        cases = [
+            (START, [20, 400, 8902]),
+            ("r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1", [48, 2039]),
+            ("8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - 0 1", [14, 191, 2812]),
+            ("r3k2r/Pppp1ppp/1b3nbN/nP6/BBP1P3/q4N2/Pp1P2PP/R2Q1RK1 w kq - 0 1", [6, 264, 9467]),
+            ("rnbq1k1r/pp1Pbppp/2p5/8/2B5/8/PPP1NnPP/RNBQK2R w KQ - 1 8", [44, 1486]),
+        ]
+        for fen, expected in cases:
+            with self.subTest(fen):
+                pos = Position.from_fen(fen)
+                self.assertEqual([perft(pos, d) for d in range(1, len(expected) + 1)], expected)
+                self.assertEqual(pos.fen(), fen)
+
+    def test_results(self):
+        from army.chess import Position
+
+        p = Position.from_fen()
+        for m in ["f2f3", "e7e5", "g2g4", "d8h4"]:
+            p = p.play(p.parse(m))
+        self.assertEqual(p.result(), "checkmate - Black wins")
+        self.assertEqual(Position.from_fen("7k/5Q2/6K1/8/8/8/8/8 b - - 0 1").result(), "stalemate - draw")
+        self.assertEqual(Position.from_fen("8/8/4k3/8/8/4K3/4B3/8 w - - 0 1").result(), "insufficient material - draw")
+        p = Position.from_fen()
+        for m in ["g1f3", "g8f6", "f3g1", "f6g8"] * 2:
+            p = p.play(p.parse(m))
+        self.assertEqual(p.result(), "threefold repetition - draw")
+
+    def test_arena_rejects_illegal_moves(self):
+        script = ['{"final":"f2f3"}', '{"final":"e7e5"}', '{"final":"e1e8"}', '{"final":"g2g4"}', '{"final":"d8h4"}']
+        out = cli.find("chess-arena").build(llm=Mock(script)).run("play").output
+        self.assertIn("1. f2f3 e7e5 2. g2g4 d8h4", out)
+        self.assertIn("Result: checkmate - Black wins", out)
