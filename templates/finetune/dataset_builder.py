@@ -13,7 +13,7 @@ META = {
     "description": "Docs folder to grounded instruction/response pairs in chat JSONL, with a held-out eval split.",
     "example": "Build 20 training examples from examples/knowledge-base for a support assistant",
 }
-EVALS = [{"input": "Build 6 training examples from examples/knowledge-base", "must_contain": ["saved", ".jsonl"], "max_seconds": 300}]
+EVALS = [{"input": "Build 6 training examples from examples/knowledge-base", "must_contain": ["outputs/", ".jsonl"], "max_seconds": 300}]
 
 
 def build(llm=None, docs: str = "examples/knowledge-base"):
