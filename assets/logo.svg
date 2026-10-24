@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="Agent Army logo">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0B1026"/>
+      <stop offset="1" stop-color="#1E1B4B"/>
+    </linearGradient>
+    <linearGradient id="edge" gradientUnits="userSpaceOnUse" x1="128" y1="108" x2="384" y2="404">
+      <stop offset="0" stop-color="#22D3EE"/>
+      <stop offset="1" stop-color="#8B5CF6"/>
+    </linearGradient>
+    <linearGradient id="flame" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0" stop-color="#F97316"/>
+      <stop offset="0.6" stop-color="#FDBA4D"/>
+      <stop offset="1" stop-color="#FFF4C7"/>
+    </linearGradient>
+    <filter id="glow" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="9" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+  <!-- A: two legs and a crossbar, drawn as an agent graph -->
+  <g stroke="url(#edge)" stroke-width="22" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <path d="M128 404 L256 108 L384 404"/>
+    <path d="M180 300 L332 300"/>
+  </g>
+  <!-- forge flame in the counter of the A -->
+  <path filter="url(#glow)" fill="url(#flame)"
+        d="M256 176 C 278 206, 296 228, 290 254 C 286 272, 272 282, 256 284 C 240 282, 226 272, 222 254 C 218 236, 232 226, 238 214 C 242 228, 248 234, 254 236 C 250 214, 252 196, 256 176 Z"/>
+  <!-- agent nodes -->
+  <g stroke="#0B1026" stroke-width="8">
+    <circle cx="256" cy="108" r="26" fill="#22D3EE"/>
+    <circle cx="128" cy="404" r="26" fill="#6366F1"/>
+    <circle cx="384" cy="404" r="26" fill="#8B5CF6"/>
+    <circle cx="180" cy="300" r="18" fill="#38BDF8"/>
+    <circle cx="332" cy="300" r="18" fill="#A78BFA"/>
+  </g>
+</svg>
