@@ -3,12 +3,12 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "atomesus-agent-forge"
+name = "agent-army"
 version = "0.1.0"
 description = "Production-grade AI agent templates on one tiny, model-agnostic core. Zero dependencies."
 readme = "README.md"
 license = { text = "MIT" }
-authors = [{ name = "Atomesus Team", email = "marketing@atomesus.com" }]
+authors = [{ name = "Agent Army contributors" }]
 requires-python = ">=3.11"
 dependencies = []
 keywords = ["ai", "agents", "llm", "rag", "claude", "openai", "gemini", "ollama"]
@@ -19,7 +19,7 @@ classifiers = [
 ]
 
 [project.scripts]
-forge = "forge.cli:main"
+army = "army.cli:main"
 
 [tool.setuptools]
-packages = ["forge"]
+packages = ["army"]

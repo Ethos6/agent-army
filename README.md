@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="assets/logo.svg" width="128" alt="Atomesus Agent Forge logo">
+  <img src="assets/logo.svg" width="128" alt="Agent Army logo">
 </p>
 
-<h1 align="center">Atomesus Agent Forge</h1>
+<h1 align="center">Agent Army</h1>
 
 <p align="center">
   <b>Production-grade AI agent templates on one tiny, model-agnostic core.</b><br>
@@ -30,39 +30,39 @@
 
 Most "awesome AI apps" collections are a pile of demos: every folder uses a different framework, a different UI and a different provider, has its own requirements file, and comes with no way to know if it still works. You clone a repo with 100 projects and end up learning 100 setups.
 
-Agent Forge takes the opposite approach.
+Agent Army takes the opposite approach.
 
-|                   | Typical demo collections                 | **Agent Forge**                                                 |
+|                   | Typical demo collections                 | **Agent Army**                                                 |
 | ----------------- | ---------------------------------------- | --------------------------------------------------------------- |
 | Setup             | New `requirements.txt` per project       | `pip install -e .` once, **zero** third-party dependencies      |
 | Switching models  | Rewrite the code                         | `--model ollama:llama3.2` or `--model anthropic:claude-sonnet-4-5` |
-| Running a project | Different command each time              | `forge run <template> "<task>"` for all of them                 |
+| Running a project | Different command each time              | `army run <template> "<task>"` for all of them                 |
 | Quality           | "Works on my machine"                    | Eval cases in every manifest, offline tests and CI on every PR  |
 | Safety            | Tools can read any file and run anything | Sandboxed file access, AST-only calculator, no `eval` or shell  |
 | Learning curve    | One framework per folder                 | One ~200-line agent loop you can read in ten minutes            |
-| Adding your own   | Copy a folder and hope                   | `forge new my-agent` scaffolds a manifest, code and README     |
+| Adding your own   | Copy a folder and hope                   | `army new my-agent` scaffolds a manifest, code and README     |
 
 ## Quick start
 
 ```bash
-git clone https://github.com/Ethos6/agent-forge.git
-cd agent-forge
+git clone https://github.com/Ethos6/agent-army.git
+cd agent-army
 pip install -e .
 
-# pick any provider; Forge detects whichever key is set
+# pick any provider; Army detects whichever key is set
 export ANTHROPIC_API_KEY=...      # or OPENAI_API_KEY / GEMINI_API_KEY / DEEPSEEK_API_KEY / GROQ_API_KEY
-# ...or no key at all: Forge falls back to a local Ollama model
+# ...or no key at all: Army falls back to a local Ollama model
 
-forge list
-forge run csv-analyst "Which channel drove the most revenue in examples/data/campaigns.csv?" -v
-forge run docs-qa "What is the refund window on the Pro plan?"
-forge run content-team "Announce our new open-source agent framework" --model gemini:gemini-2.5-flash
+army list
+army run csv-analyst "Which channel drove the most revenue in examples/data/campaigns.csv?" -v
+army run docs-qa "What is the refund window on the Pro plan?"
+army run content-team "Announce our new open-source agent framework" --model gemini:gemini-2.5-flash
 ```
 
 Use it as a library too:
 
 ```python
-from forge import Agent, tool, get_llm
+from army import Agent, tool, get_llm
 
 @tool
 def word_count(text: str) -> int:
@@ -78,15 +78,15 @@ print(agent.run("Is this under 20 words? 'Ship small, ship often.'"))
 <!-- catalog:start -->
 | Template | What it does | Category | Try it |
 |---|---|---|---|
-| [**Research Brief Agent**](templates/research-brief) | Reads the pages you give it and writes a cited, executive-ready brief that separates facts from inference. | `research` | `forge run research-brief "Summarize https://en.wikipedia.org/wiki/Large_language_model for a CMO"` |
-| [**CSV Analyst Agent**](templates/csv-analyst) | Answers plain-English questions about a CSV with tool-computed numbers only, and shows its working. | `data` | `forge run csv-analyst "Which channel drove the most revenue in examples/data/campaigns.csv?"` |
-| [**Docs Q&A Agent (RAG)**](templates/docs-qa) | Chat with any folder of docs. Every claim is cited to file:line, and it refuses when the answer isn't there. | `rag` | `forge run docs-qa "What is the refund window on the Pro plan?"` |
-| [**Code Review Agent**](templates/code-reviewer) | Reviews your git diff like a staff engineer: severity-ranked bugs with a trigger scenario and a fix, no style nits. | `engineering` | `forge run code-reviewer "Review my uncommitted changes"` |
-| [**Content Team (Strategist, Writer, Editor)**](templates/content-team) | A three-agent pipeline: a strategist writes the brief, a writer drafts the piece, and an editor cuts it to publish-ready copy. | `marketing` | `forge run content-team "Announce our new open-source agent framework to developers"` |
-| [**Competitor Watch Agent**](templates/competitor-watch) | Fetches competitor homepages and pricing pages and turns them into a positioning table, gaps, and three concrete moves. | `business` | `forge run competitor-watch "We are https://ourco.com, compare us with https://rival1.com/pricing and https://rival2.com"` |
+| [**Research Brief Agent**](templates/research-brief) | Reads the pages you give it and writes a cited, executive-ready brief that separates facts from inference. | `research` | `army run research-brief "Summarize https://en.wikipedia.org/wiki/Large_language_model for a CMO"` |
+| [**CSV Analyst Agent**](templates/csv-analyst) | Answers plain-English questions about a CSV with tool-computed numbers only, and shows its working. | `data` | `army run csv-analyst "Which channel drove the most revenue in examples/data/campaigns.csv?"` |
+| [**Docs Q&A Agent (RAG)**](templates/docs-qa) | Chat with any folder of docs. Every claim is cited to file:line, and it refuses when the answer isn't there. | `rag` | `army run docs-qa "What is the refund window on the Pro plan?"` |
+| [**Code Review Agent**](templates/code-reviewer) | Reviews your git diff like a staff engineer: severity-ranked bugs with a trigger scenario and a fix, no style nits. | `engineering` | `army run code-reviewer "Review my uncommitted changes"` |
+| [**Content Team (Strategist, Writer, Editor)**](templates/content-team) | A three-agent pipeline: a strategist writes the brief, a writer drafts the piece, and an editor cuts it to publish-ready copy. | `marketing` | `army run content-team "Announce our new open-source agent framework to developers"` |
+| [**Competitor Watch Agent**](templates/competitor-watch) | Fetches competitor homepages and pricing pages and turns them into a positioning table, gaps, and three concrete moves. | `business` | `army run competitor-watch "We are https://ourco.com, compare us with https://rival1.com/pricing and https://rival2.com"` |
 <!-- catalog:end -->
 
-Every template is a folder with three files: `agent.toml` (metadata and eval cases), `agent.py` (a `build()` function, usually under 40 lines) and `README.md`. The table above is generated from the manifests by `forge catalog`, and CI fails if it falls out of date.
+Every template is a folder with three files: `agent.toml` (metadata and eval cases), `agent.py` (a `build()` function, usually under 40 lines) and `README.md`. The table above is generated from the manifests by `army catalog`, and CI fails if it falls out of date.
 
 ## How it works
 
@@ -104,13 +104,13 @@ flowchart LR
 2. **Forgiving parser.** `parse_action` finds the action even when the model wraps it in prose or code fences.
 3. **Tools are plain Python functions.** The `@tool` decorator reads the signature and docstring. Tool errors go back to the model as observations, so it can recover instead of crashing.
 4. **Pipelines for teams.** `Pipeline(strategist, writer, editor)` passes each agent the original request plus the previous agent's output.
-5. **Evals in the manifest.** `forge eval` runs each `[[evals]]` case against a real model and checks required phrases and time limits, so you can see what a model change actually does to quality.
+5. **Evals in the manifest.** `army eval` runs each `[[evals]]` case against a real model and checks required phrases and time limits, so you can see what a model change actually does to quality.
 
 The full walkthrough is in **[docs/HOW_IT_WORKS.md](docs/HOW_IT_WORKS.md)**.
 
 ## Supported models
 
-| Provider     | `--model` / `FORGE_MODEL`              | Key                   |
+| Provider     | `--model` / `ARMY_MODEL`              | Key                   |
 | ------------ | -------------------------------------- | --------------------- |
 | Anthropic    | `anthropic:<model>`                    | `ANTHROPIC_API_KEY`   |
 | OpenAI       | `openai:<model>`                       | `OPENAI_API_KEY`      |
@@ -125,8 +125,8 @@ The full walkthrough is in **[docs/HOW_IT_WORKS.md](docs/HOW_IT_WORKS.md)**.
 
 ```bash
 python -m unittest discover -s tests -v   # offline, no keys needed
-forge validate                            # every manifest is complete and every build() works
-forge eval                                # run all eval cases against your configured model
+army validate                            # every manifest is complete and every build() works
+army eval                                # run all eval cases against your configured model
 ```
 
 ## Roadmap
@@ -139,8 +139,8 @@ forge eval                                # run all eval cases against your conf
 
 ## Contributing
 
-New templates are welcome. Run `forge new my-agent`, fill in the three files, then make sure `forge validate` and the tests pass. See [CONTRIBUTING.md](CONTRIBUTING.md).
+New templates are welcome. Run `army new my-agent`, fill in the three files, then make sure `army validate` and the tests pass. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
-[MIT](LICENSE) © 2026 Atomesus Team
+[MIT](LICENSE) © 2026 Agent Army contributors
