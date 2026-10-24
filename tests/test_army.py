@@ -6,6 +6,7 @@ import tempfile
 import threading
 import time
 import unittest
+import urllib.error
 import urllib.request
 from pathlib import Path
 from unittest import mock
@@ -238,10 +239,25 @@ class CLI(unittest.TestCase):
             except OSError:
                 time.sleep(0.1)
         self.assertGreaterEqual(len(catalog), 100)
-        req = urllib.request.Request(f"http://127.0.0.1:{port}/api/run", data=json.dumps(
-            {"template": "email-writer", "task": "hi", "model": "mock"}).encode(), headers={"content-type": "application/json"})
-        self.assertEqual(json.loads(urllib.request.urlopen(req).read())["output"], "mock answer")
-        self.assertIn(b"Agent Army", urllib.request.urlopen(f"http://127.0.0.1:{port}/").read())
+        html = urllib.request.urlopen(f"http://127.0.0.1:{port}/").read().decode()
+        self.assertIn("Agent Army", html)
+        token = html.split("const TOKEN=")[1].split(";")[0].strip('"')
+        body = json.dumps({"template": "email-writer", "task": "hi", "model": "mock"}).encode()
+
+        def post(headers):
+            req = urllib.request.Request(f"http://127.0.0.1:{port}/api/run", data=body, headers=headers)
+            try:
+                return urllib.request.urlopen(req).status, None
+            except urllib.error.HTTPError as e:
+                return e.code, e.read()
+
+        ok = urllib.request.Request(f"http://127.0.0.1:{port}/api/run", data=body,
+                                    headers={"content-type": "application/json", "x-army-token": token})
+        self.assertEqual(json.loads(urllib.request.urlopen(ok).read())["output"], "mock answer")
+        # cross-site style requests are refused: no token, wrong content type, or a rebinding Host header
+        self.assertEqual(post({"content-type": "text/plain"})[0], 403)
+        self.assertEqual(post({"content-type": "text/plain", "x-army-token": token})[0], 415)
+        self.assertEqual(post({"content-type": "application/json", "x-army-token": token, "host": "evil.example"})[0], 403)
 
 
 if __name__ == "__main__":
@@ -385,3 +401,214 @@ class Regressions(unittest.TestCase):
             self.assertEqual(server.call("echo", {"text": "next"}), "next")
         finally:
             server.close()
+
+
+class Regressions2(unittest.TestCase):
+    """Second full review: each test pins one fixed bug."""
+
+    # ---- agent loop and teams
+    def test_non_json_tool_results_are_shown(self):
+        import datetime
+
+        @tool
+        def today() -> str:
+            """Today's date."""
+            return {"date": datetime.date(2026, 1, 2), "tags": {"a"}}
+
+        llm = Mock(['{"tool": "today", "args": {}}', '{"final": "ok"}'])
+        result = Agent("t", "x", [today], llm=llm).run("q")
+        self.assertIn("2026-01-02", result.steps[0].content)
+
+    def test_step_limit_never_returns_raw_tool_call(self):
+        out = Agent("t", "x", [calculate], llm=Mock(['{"tool": "calculate", "args": {"expression": "1"}}'] * 5), max_steps=2).run("q").output
+        self.assertTrue(out.startswith("Stopped: step limit"))
+
+    def test_pipeline_stages_see_all_earlier_outputs(self):
+        third = Mock(["done"])
+        Pipeline(Agent("a", "x", llm=Mock(["BRIEF"])), Agent("b", "x", llm=Mock(["DRAFT"])), Agent("c", "x", llm=third)).run("req")
+        seen = third.calls[0][1][0]["content"]
+        self.assertIn("BRIEF", seen)
+        self.assertIn("DRAFT", seen)
+
+    def test_panel_can_be_delegated_to(self):
+        panel = Panel([Agent("m", "x", llm=Mock(["a"]))], Agent("j", "x", llm=Mock(["merged"])))
+        self.assertEqual(panel.as_tool("ask the panel")(task="q"), "merged")
+
+    # ---- providers
+    def test_gemini_blocked_prompt_is_clear_error(self):
+        from army.llm import LLMError
+
+        with mock.patch("army.llm._post", lambda *a, **k: {"candidates": [], "promptFeedback": {"blockReason": "SAFETY"}}), \
+                mock.patch.dict(os.environ, {"GEMINI_API_KEY": "k"}):
+            with self.assertRaises(LLMError):
+                get_llm("gemini:x").chat("s", [{"role": "user", "content": "q"}])
+
+    def test_base_url_env_is_read_at_call_time(self):
+        with mock.patch.dict(os.environ, {"OPENAI_BASE_URL": "http://localhost:9999/v1"}):
+            self.assertEqual(get_llm("openai:x").base, "http://localhost:9999/v1")
+
+    # ---- CLI
+    def test_schedule_survives_webhook_failure(self):
+        with tempfile.TemporaryDirectory() as d, mock.patch("urllib.request.urlopen", side_effect=OSError("dns down")):
+            out = Path(d) / "log.md"
+            cli.main(["schedule", "email-writer", "x", "--times", "2", "--every", "0", "--webhook", "http://hook.test",
+                      "--out", str(out), "--model", "mock"])
+            self.assertEqual(out.read_text().count("# Email Writer"), 2)
+
+    def test_catalog_refuses_readme_without_markers(self):
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / "README.md").write_text("intro\n<!-- catalog:start -->\nimportant docs\n")
+            with mock.patch.object(cli, "ROOT", Path(d)), self.assertRaises(SystemExit):
+                cli.main(["catalog"])
+            self.assertIn("important docs", (Path(d) / "README.md").read_text())
+
+    def test_export_skill_includes_panel_judge(self):
+        with tempfile.TemporaryDirectory() as d:
+            cli.main(["export-skill", "reader-panel", "--out", d])
+            self.assertIn("## Step: editor", (Path(d) / "reader-panel" / "SKILL.md").read_text())
+
+    def test_fen_counters_optional(self):
+        from army.chess import Position
+
+        self.assertEqual(Position.from_fen("8/8/8/8/8/8/8/K6k w").fen(), "8/8/8/8/8/8/8/K6k w - - 0 1")
+
+    # ---- sandbox
+    def _repo_with_secret(self, d):
+        import subprocess as sp
+
+        root = Path(d)
+        (root / "secret.txt").write_text("TOP SECRET")
+        (root / "sub").mkdir()
+        (root / "sub" / "ok.txt").write_text("fine")
+        env = {**os.environ, "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t"}
+        for cmd in (["git", "init", "-q"], ["git", "add", "."], ["git", "commit", "-qm", "init"]):
+            sp.run(cmd, cwd=root, check=True, env=env)
+        return root
+
+    def test_git_tools_cannot_leave_the_sandbox(self):
+        from army.tools import git_diff, git_show
+
+        with tempfile.TemporaryDirectory() as d:
+            root = self._repo_with_secret(d)
+            with mock.patch.dict(os.environ, {"ARMY_WORKDIR": str(root / "sub")}):
+                with self.assertRaises((PermissionError, RuntimeError)):
+                    git_show(commit="HEAD")
+                with self.assertRaises((PermissionError, RuntimeError)):
+                    git_diff(ref="HEAD")
+            with mock.patch.dict(os.environ, {"ARMY_WORKDIR": str(root)}):
+                with self.assertRaises(ValueError):
+                    git_show(commit="HEAD:secret.txt")
+                self.assertIn("init", git_show(commit="HEAD"))
+
+    def test_write_file_refuses_symlinked_outputs(self):
+        from army.tools import write_file
+
+        with tempfile.TemporaryDirectory() as d, tempfile.TemporaryDirectory() as elsewhere:
+            os.symlink(elsewhere, Path(d) / "outputs")
+            with mock.patch.dict(os.environ, {"ARMY_WORKDIR": d}), self.assertRaises(PermissionError):
+                write_file(filename="x.txt", content="x")
+            self.assertEqual(os.listdir(elsewhere), [])
+
+    def test_calculator_is_fast_and_bounded(self):
+        started = time.time()
+        self.assertEqual(calculate(expression="**".join(["1"] * 60)), "1")
+        self.assertLess(time.time() - started, 1)
+        for bad in ["((9**99)**99)**99", "(10**100)**50", "9**9**9"]:
+            with self.assertRaises(ValueError):
+                calculate(expression=bad)
+        with self.assertRaises(ValueError):
+            calculate(expression="True + 1")
+
+    # ---- data tools
+    def test_ragged_csv(self):
+        from army.tools import describe_csv
+
+        with tempfile.TemporaryDirectory() as d, mock.patch.dict(os.environ, {"ARMY_WORKDIR": d}):
+            (Path(d) / "a.csv").write_text("name,city\nann,paris\nbob\n")
+            (Path(d) / "b.csv").write_text("a,b\n1,2,3\n4,5\n")
+            self.assertIn("rows: 2", describe_csv(path="a.csv"))
+            self.assertIn("more fields than the header", describe_csv(path="b.csv"))
+
+    def test_html_title_and_line_breaks(self):
+        from army.tools import html_to_text
+
+        title, text = html_to_text("<title>Real</title><svg><title>icon</title></svg><p>one<br>two</p>")
+        self.assertEqual(title, "Real")
+        self.assertEqual(text, "one\ntwo")
+
+    def test_vtt_without_hours(self):
+        with tempfile.TemporaryDirectory() as d, mock.patch.dict(os.environ, {"ARMY_WORKDIR": d}):
+            (Path(d) / "t.vtt").write_text("WEBVTT\n\n00:01.000 --> 00:04.000\nHello\n\n01:05.500 --> 01:07.000\nBye\n")
+            self.assertEqual(read_transcript(path="t.vtt"), "[00:01] Hello\n[01:05] Bye")
+
+    def test_unicode_tokens(self):
+        from army.rag import tokenize
+
+        self.assertEqual(tokenize("Jürgen naïve"), ["jürgen", "naïve"])
+        self.assertIn("东京", tokenize("我在东京"))
+
+    def test_shared_memory_instances_dont_overwrite(self):
+        path = Path(TMP_HOME) / "shared.json"
+        a, b = Memory(path=path), Memory(path=path)
+        a.add("user lives in Paris")
+        b.add("user is vegetarian")
+        texts = sorted(i["text"] for i in Memory(path=path).items)
+        self.assertEqual(texts, ["user is vegetarian", "user lives in Paris"])
+
+    # ---- web tools
+    def test_zero_search_results_are_not_an_error(self):
+        with mock.patch("army.web.http_get", lambda *a, **k: "<html></html>"), \
+                mock.patch("army.web.http_json", lambda *a, **k: {"query": {"search": []}}):
+            self.assertEqual(web.web_search(query="zzqq"), "no results")
+
+    def test_github_paths_are_safe(self):
+        with self.assertRaises(ValueError):
+            web._repo("../..")
+        seen = []
+        with mock.patch("army.web._gh", lambda path: seen.append(path) or {"content": "aGk="}):
+            web.github_file(repo="psf/requests", path="docs/my notes#1.md")
+        self.assertEqual(seen[0], "repos/psf/requests/contents/docs/my%20notes%231.md")
+
+    def test_feed_xhtml_content_and_weather_nulls(self):
+        atom = (b'<feed xmlns="http://www.w3.org/2005/Atom"><entry><title>T</title><link href="http://x"/>'
+                b'<summary type="xhtml"><div xmlns="http://www.w3.org/1999/xhtml"><p>Body text</p></div></summary></entry></feed>')
+        with mock.patch("army.web.http_get_bytes", lambda *a, **k: (atom, None)):
+            self.assertIn("Body text", web.read_feed(url="u"))
+
+        def fake(url, *a, **k):
+            if "geocoding" in url:
+                return {"results": [{"name": "X", "latitude": 1, "longitude": 2}]}
+            return {"daily": {"time": ["d"], "temperature_2m_max": [None], "temperature_2m_min": [1.0], "precipitation_probability_max": [None]}}
+
+        with mock.patch("army.web.http_json", fake):
+            self.assertIn("d: 1-?C, rain ?%", web.weather(place="X"))
+
+    # ---- MCP
+    def test_mcp_concurrent_first_use_starts_one_server(self):
+        server = MCPServer([sys.executable, str(ROOT / "tests" / "fake_mcp_server.py")], name="fake", timeout=20)
+        results, procs = [], set()
+
+        def worker(i):
+            results.append(server.call("echo", {"text": str(i)}))
+            procs.add(id(server.proc))
+
+        threads = [threading.Thread(target=worker, args=(i,)) for i in range(8)]
+        try:
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join(30)
+            self.assertEqual(sorted(results), [str(i) for i in range(8)])
+            self.assertEqual(len(procs), 1)
+        finally:
+            server.close()
+
+    # ---- agents
+    def test_twenty_questions_ignores_apostrophes(self):
+        game = cli.find("twenty-questions").build(llm=Mock(['{"final": "penguin"}'] + ['{"final": "Correct"}'] * 4))
+        self.assertIn("guessed 'penguin'", game.run("Let's play, you pick an animal").output)
+
+    def test_numeric_options_accept_decimals(self):
+        for name, opt in [("podcast-generator", {"minutes": "2.5"}), ("chess-arena", {"max_plies": "10.0"}),
+                          ("deep-research", {"depth": "12"}), ("audio-tour-guide", {"stops": "3.0"})]:
+            cli.find(name).build(**opt)
