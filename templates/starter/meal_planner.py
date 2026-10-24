@@ -25,7 +25,7 @@ Rules: reuse perishable ingredients across at least two meals; batch-cook once; 
 and cost sum; keep estimated cost within budget.
 
 Output:
-## Plan  (table: Day | Breakfast | Lunch | Dinner | Prep minutes)
+## Plan  (table: Day (Monday, Tuesday, ...) | Breakfast | Lunch | Dinner | Prep minutes)
 ## Shopping list  (grouped by aisle: produce, protein, dairy, pantry...; quantity and estimated price each)
 ## Total estimated cost
 ## Batch-prep plan  (what to cook on day 1 and how to store it)""",

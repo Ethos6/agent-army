@@ -13,7 +13,7 @@ META = {
     "description": "Turns any web page into a clean CSV/JSON of the fields you describe, saved to outputs/.",
     "example": "Extract every heading and its first sentence from https://en.wikipedia.org/wiki/Web_scraping as CSV",
 }
-EVALS = [{"input": "List the section headings of https://en.wikipedia.org/wiki/Web_scraping as JSON", "must_contain": ["saved"], "max_seconds": 180}]
+EVALS = [{"input": "List the section headings of https://en.wikipedia.org/wiki/Web_scraping as JSON", "must_contain": ["outputs/"], "max_seconds": 180}]
 
 
 def build(llm=None):

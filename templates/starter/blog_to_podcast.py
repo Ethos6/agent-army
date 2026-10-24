@@ -19,7 +19,7 @@ def build(llm=None, minutes: str = "5"):
     return Agent(
         name="blog-to-podcast",
         instructions=f"""You are a podcast producer. Fetch the article with `fetch_url`, then write a {minutes}-minute script
-(about {int(minutes) * 150} words) for two hosts:
+(about {int(float(minutes) * 150)} words) for two hosts:
 - HOST A: curious, asks the questions a listener would ask.
 - HOST B: explains clearly with concrete examples from the article.
 
