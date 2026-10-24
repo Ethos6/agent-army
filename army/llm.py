@@ -60,7 +60,7 @@ class LLM:
     def __init__(self, model: str):
         self.model = model
 
-    def chat(self, system: str, messages: list[dict]) -> str:  # pragma: no cover
+    def chat(self, system: str, messages: list[dict], **kw) -> str:  # pragma: no cover
         raise NotImplementedError
 
     def __repr__(self) -> str:
@@ -75,7 +75,7 @@ class Anthropic(LLM):
         self.max_tokens = max_tokens
         self.base = os.environ.get("ANTHROPIC_BASE_URL", "https://api.anthropic.com")
 
-    def chat(self, system, messages):
+    def chat(self, system, messages, **kw):
         r = _post(
             f"{self.base}/v1/messages",
             {"model": self.model, "max_tokens": self.max_tokens, "system": system, "messages": messages},
@@ -93,20 +93,19 @@ class OpenAICompatible(LLM):
         self.base = base_url.rstrip("/")
         self.key_env = key_env
 
-    def chat(self, system, messages):
+    def chat(self, system, messages, **kw):
         headers = {"authorization": f"Bearer {_key(self.key_env)}"} if self.key_env else {}
-        r = _post(
-            f"{self.base}/chat/completions",
-            {"model": self.model, "messages": [{"role": "system", "content": system}, *messages]},
-            headers,
-        )
+        payload = {"model": self.model, "messages": [{"role": "system", "content": system}, *messages]}
+        if kw.get("json_mode") and (self.provider == "ollama" or os.environ.get("ARMY_JSON_MODE") == "1"):
+            payload["response_format"] = {"type": "json_object"}  # constrained decoding: always-valid JSON
+        r = _post(f"{self.base}/chat/completions", payload, headers)
         return r["choices"][0]["message"].get("content") or ""
 
 
 class Gemini(LLM):
     provider = "gemini"
 
-    def chat(self, system, messages):
+    def chat(self, system, messages, **kw):
         contents = [
             {"role": "model" if m["role"] == "assistant" else "user", "parts": [{"text": m["content"]}]}
             for m in messages
@@ -130,7 +129,7 @@ class Mock(LLM):
         self.responses = list(responses or [])
         self.calls: list[tuple[str, list[dict]]] = []
 
-    def chat(self, system, messages):
+    def chat(self, system, messages, **kw):
         self.calls.append((system, [dict(m) for m in messages]))
         return self.responses.pop(0) if self.responses else '{"final": "mock answer"}'
 

@@ -166,6 +166,10 @@ def cmd_eval(args):
             try:
                 agent = build_from_args(t, args, case.get("options"))
                 out = agent.run(case["input"]).output
+                if args.report:
+                    dump = Path("outputs") / "evals" / f"{t.name}-{total}.md"
+                    dump.parent.mkdir(parents=True, exist_ok=True)
+                    dump.write_text(f"# {t.name}\n\n## Input\n\n{case['input']}\n\n## Output\n\n{out}\n")
                 missing = [w for w in case.get("must_contain", []) if w.lower() not in out.lower()]
                 slow = not args.ignore_time and time.time() - started > case.get("max_seconds", 600)
                 ok, reason = not missing and not slow, (f"missing {missing}" if missing else "too slow" if slow else "")

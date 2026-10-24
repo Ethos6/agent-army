@@ -19,6 +19,11 @@ Work step by step. Each reply must be exactly ONE JSON object and nothing else:
   {{"thought": "<short reasoning>", "final": "<your complete answer>"}}         when you are done
 After a tool call you will receive its result as an Observation. Never invent observations."""
 
+PROTOCOL_REMINDER = (
+    'Reply with exactly ONE JSON object: {"tool": "<name>", "args": {...}} to use a tool, '
+    'or {"final": "<your complete answer>"} if you are done.'
+)
+
 
 @dataclass
 class Tool:
@@ -142,28 +147,40 @@ class Agent:
         except Exception as e:  # tool errors are shown to the model so it can recover
             return f"Error: {type(e).__name__}: {e}"
 
+    def _chat(self, messages: list[dict]) -> str:
+        try:  # ask for strict JSON when the model supports it (agents with tools speak JSON)
+            return self.llm.chat(self.system_prompt, messages, json_mode=bool(self.tools))
+        except TypeError:  # custom LLM classes written without **kwargs
+            return self.llm.chat(self.system_prompt, messages)
+
     def run(self, task: str, verbose: bool = False) -> Result:
         messages = [{"role": "user", "content": task}]
         steps: list[Step] = []
+        nudged = False
         for _ in range(self.max_steps):
             started = time.time()
-            reply = self.llm.chat(self.system_prompt, messages)
+            reply = self._chat(messages)
             messages.append({"role": "assistant", "content": reply})
             action = parse_action(reply)
             if not self.tools and action and not (reply.strip().startswith(("{", "```")) and "tool" not in action):
                 action = None  # tool-less agents may legitimately mention JSON; only unwrap a bare {"final": ...}
-            if action is None or "final" in action:
-                output = _as_text(action["final"]) if action else reply.strip()
-                steps.append(Step(self.name, "final", output, seconds=time.time() - started))
-                return Result(output, steps)
-            name, args = str(action.get("tool")), action.get("args", {})
-            observation = self._call_tool(name, args)
-            steps.append(Step(self.name, "tool", observation, name, args, time.time() - started))
-            if verbose:
-                print(f"  [{self.name}] {name}({json.dumps(args)[:120]}) -> {observation[:160]!r}")
-            messages.append({"role": "user", "content": f"Observation from {name}:\n{observation}"})
+            if self.tools and action is None and not nudged:
+                nudged = True  # small models sometimes drift into prose: remind them of the protocol once
+                messages.append({"role": "user", "content": PROTOCOL_REMINDER})
+                continue
+            if action is not None and action.get("tool") and not action.get("final"):
+                name, args = str(action["tool"]), action.get("args", {})
+                observation = self._call_tool(name, args)
+                steps.append(Step(self.name, "tool", observation, name, args, time.time() - started))
+                if verbose:
+                    print(f"  [{self.name}] {name}({json.dumps(args)[:120]}) -> {observation[:160]!r}")
+                messages.append({"role": "user", "content": f"Observation from {name}:\n{observation}"})
+                continue
+            output = _as_text(action["final"]) if action and "final" in action else reply.strip()
+            steps.append(Step(self.name, "final", output, seconds=time.time() - started))
+            return Result(output, steps)
         messages.append({"role": "user", "content": 'Step limit reached. Reply now with {"final": "<answer>"}.'})
-        reply = self.llm.chat(self.system_prompt, messages)
+        reply = self._chat(messages)
         action = parse_action(reply)
         output = _as_text(action["final"]) if action and "final" in action else reply.strip()
         steps.append(Step(self.name, "final", output))
