@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "atomesus-agent-forge"
+version = "0.1.0"
+description = "Production-grade AI agent templates on one tiny, model-agnostic core. Zero dependencies."
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "Atomesus Team", email = "marketing@atomesus.com" }]
+requires-python = ">=3.11"
+dependencies = []
+keywords = ["ai", "agents", "llm", "rag", "claude", "openai", "gemini", "ollama"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "License :: OSI Approved :: MIT License",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+[project.scripts]
+forge = "forge.cli:main"
+
+[tool.setuptools]
+packages = ["forge"]
