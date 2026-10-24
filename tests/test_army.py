@@ -60,6 +60,29 @@ class AgentLoop(unittest.TestCase):
     def test_no_tools_returns_text(self):
         self.assertEqual(Agent("t", "x", llm=Mock(["plain answer"])).run("q").output, "plain answer")
 
+    def test_prose_reply_gets_one_protocol_reminder(self):
+        llm = Mock(["I think the answer is 42", '{"tool": "calculate", "args": {"expression": "6*7"}}', '{"final": "42"}'])
+        result = Agent("t", "x", [calculate], llm=llm).run("6*7?")
+        self.assertEqual(result.output, "42")
+        self.assertIn("exactly ONE JSON object", llm.calls[1][1][-1]["content"])
+
+    def test_tool_call_wins_over_empty_final(self):
+        llm = Mock(['{"tool": "calculate", "args": {"expression": "2+2"}, "final": ""}', '{"final": "4"}'])
+        result = Agent("t", "x", [calculate], llm=llm).run("2+2?")
+        self.assertEqual([s.kind for s in result.steps], ["tool", "final"])
+
+    def test_json_mode_requested_for_ollama_only(self):
+        seen = []
+        fake = lambda url, payload, headers, timeout=None: seen.append(payload) or {"choices": [{"message": {"content": '{"final": "ok"}'}}]}
+        with mock.patch("army.llm._post", fake), mock.patch.dict(os.environ, {"OPENAI_API_KEY": "test"}):
+            Agent("t", "x", [calculate], llm=get_llm("ollama:qwen2.5:3b")).run("q")
+            Agent("t", "x", [calculate], llm=get_llm("openai:gpt-4o-mini")).run("q")
+            Agent("t", "x", llm=get_llm("ollama:qwen2.5:3b")).run("q")
+        self.assertEqual(seen[0]["response_format"], {"type": "json_object"})
+        self.assertEqual(seen[0]["model"], "qwen2.5:3b")
+        self.assertNotIn("response_format", seen[1])
+        self.assertNotIn("response_format", seen[2])
+
     def test_tool_decorator_signature(self):
         @tool
         def greet(name: str, times: int = 1) -> str:
