@@ -11,7 +11,7 @@ from army.voice import text_to_speech, transcribe_audio
 META = {
     "category": "voice",
     "description": "Transcribes a caller's question, answers from your docs with citations, and replies as audio.",
-    "example": "Answer the question in examples/talks/question.mp3",
+    "example": "Caller asks (transcript): can I get a refund on the Pro plan?",
     "needs": "OPENAI_API_KEY (or OpenAI-compatible speech servers).",
 }
 EVALS = [{"input": "Caller asks (transcript): how do I rotate my API key?", "must_contain": ["security.md", ".mp3"], "max_seconds": 240}]

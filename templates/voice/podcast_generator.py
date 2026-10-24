@@ -15,11 +15,11 @@ META = {
     "example": "Make a 3-minute episode about how vaccines train the immune system",
     "needs": "OPENAI_API_KEY (or an OpenAI-compatible text-to-speech server).",
 }
-EVALS = [{"input": "A 1-minute episode about why leaves change colour", "must_contain": ["saved", ".mp3"], "max_seconds": 300}]
+EVALS = [{"input": "A 1-minute episode about why leaves change colour", "must_contain": ["outputs/", ".mp3"], "max_seconds": 300}]
 
 
 def build(llm=None, minutes: str = "3"):
-    writer = Agent("script-writer", f"""Write a {minutes}-minute narrated podcast script (~{int(minutes) * 150} words), single narrator,
+    writer = Agent("script-writer", f"""Write a {minutes}-minute narrated podcast script (~{int(float(minutes) * 150)} words), single narrator,
 conversational, with a hook, three clear segments and a recap. Research with `web_search` / `fetch_url` and only use facts
 you found. Output only the words to be spoken.""", tools=[web_search, fetch_url], llm=llm)
     producer = Agent("producer", """Take the script from the previous step and call `text_to_speech` with the full script text and a

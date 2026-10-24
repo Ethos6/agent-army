@@ -26,5 +26,5 @@ For each stop write a 60-120 second narration (story, what to look at, one surpr
 Final answer: route overview, then per stop: ### Stop N: name, walking time from previous, file path, narration text.""",
         tools=[wikipedia, web_search, text_to_speech],
         llm=llm,
-        max_steps=int(stops) * 2 + 6,
+        max_steps=max(1, int(float(stops))) * 2 + 6,
     )

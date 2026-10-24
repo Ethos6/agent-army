@@ -11,7 +11,7 @@ from army.voice import transcribe_audio
 META = {
     "category": "voice",
     "description": "Turns a rambling voice memo into decisions, open questions and actions; inferences clearly marked.",
-    "example": "Turn my memo notes/idea.m4a into a brief",
+    "example": "Transcript: we should ship the beta Friday, actually Monday, and ask Priya to review pricing first",
     "needs": "OPENAI_API_KEY (or any OpenAI-compatible speech-to-text server via OPENAI_BASE_URL).",
 }
 EVALS = [{"input": "Transcript: ok so I think we launch in March, no wait, April is safer because of the audit. Need to ask Sam about budget. Also book the venue by Friday.", "must_contain": ["Decisions", "Actions", "April"], "max_seconds": 120}]
