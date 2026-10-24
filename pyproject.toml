@@ -8,7 +8,7 @@ version = "0.2.0"
 description = "110 production-grade AI agents on one tiny, model-agnostic core. Zero dependencies."
 readme = "README.md"
 license = { text = "MIT" }
-authors = [{ name = "Agent Army contributors" }]
+authors = [{ name = "Ethos6" }]
 requires-python = ">=3.11"
 dependencies = []
 keywords = ["ai", "agents", "llm", "rag", "claude", "openai", "gemini", "ollama"]

@@ -356,4 +356,4 @@ New agents are welcome. Run `army new <category> <name>`, fill in the file, then
 
 ## License
 
-[MIT](LICENSE) © 2026 Agent Army contributors
+[MIT](LICENSE) © 2026 Ethos6
