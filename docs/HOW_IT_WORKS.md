@@ -48,7 +48,7 @@ if steps run out: ask the model for its final answer
 
 | Pattern | Class | Example agents |
 | --- | --- | --- |
-| Sequential hand-off: each agent sees the request plus the previous output | `Pipeline(a, b, c)` | content-team, legal-team, deep-research |
+| Sequential hand-off: each agent sees the request plus every earlier agent's output | `Pipeline(a, b, c)` | content-team, legal-team, deep-research |
 | Independent answers, then a judge | `Panel([a, b, c], judge)` | mixture-of-models, reader-panel, design-review-panel |
 | Manager delegates to workers as tools | `worker.as_tool("...")` / `agent_tool(...)` | finance-team, travel-team |
 | Custom control flow | any object with `.run(task)` | tic-tac-toe-arena, twenty-questions |

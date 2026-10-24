@@ -333,7 +333,7 @@ army run competitor-watch "We are https://ourco.com, compare us with https://riv
 ### Due Diligence Team
 
 An investment-committee workflow for a startup: a market analyst, a product and technology analyst
-and a risk analyst each research the company independently, then a partner writes the investment
+and a risk analyst research the company in turn, each building on the earlier sections, then a partner writes the investment
 memo with a clear recommendation and the questions to ask the founders.
 
 ```bash
@@ -1311,7 +1311,7 @@ places where you changed your mind. Anything the model inferred, rather than hea
 marked.
 
 ```bash
-army run voice-notes-brief "Turn my memo notes/idea.m4a into a brief"
+army run voice-notes-brief "Transcript: we should ship the beta Friday, actually Monday, and ask Priya to review pricing first"
 ```
 
 **Tools:** `transcribe_audio`  
@@ -1325,7 +1325,7 @@ question, answers it from your knowledge base with citations (never from general
 speaks the answer back as an MP3. If the docs don't cover it, it says it will escalate to a human.
 
 ```bash
-army run voice-support "Answer the question in examples/talks/question.mp3"
+army run voice-support "Caller asks (transcript): can I get a refund on the Pro plan?"
 ```
 
 **Options:** `docs` (default `examples/knowledge-base`)  
