@@ -1,0 +1,13 @@
+name = "code-reviewer"
+title = "Code Review Agent"
+category = "engineering"
+description = "Reviews your git diff like a staff engineer: severity-ranked bugs with a trigger scenario and a fix, no style nits."
+example = "Review my uncommitted changes"
+
+[[evals]]
+input = """Review this code, it was pasted directly:
+def avg(xs):
+    return sum(xs) / len(xs)
+"""
+must_contain = ["empty", "Verdict"]
+max_seconds = 120
