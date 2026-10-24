@@ -4,6 +4,9 @@ on:
   push:
     branches: [main]
   pull_request:
+  schedule:
+    - cron: "17 6 * * 1"   # weekly: catch public APIs that change under us
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -19,12 +22,46 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
-      - run: pip install -e .
+      - run: pip install -e . pypdf
       - name: Unit tests (offline, no API keys)
         run: python -m unittest discover -s tests -v
-      - name: Validate every template
+      - name: Validate every agent
         run: army validate
       - name: Generated README catalog and docs are up to date
         run: |
           army catalog --check
           army docs --check
+
+  live-web:
+    # Real calls to every public API the web tools use. Third-party services can be flaky or
+    # rate-limit shared CI IPs, so this job reports problems without blocking merges.
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e .
+      - name: Live web tools
+        env:
+          ARMY_LIVE: "1"
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python -m unittest tests.test_live.LiveWeb -v
+
+  live-mcp:
+    # Starts real MCP servers with npx and drives them through army.mcp.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: pip install -e .
+      - name: Live MCP servers
+        env:
+          ARMY_LIVE_MCP: "1"
+        run: python -m unittest tests.test_live.LiveMCP -v

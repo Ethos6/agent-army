@@ -1,0 +1,75 @@
+name: evals
+
+# Runs agents' EVALS cases against a REAL model. Default: a free local model via Ollama, so no API key
+# is needed. To evaluate a hosted model, add its key as a repository secret (Settings > Secrets and
+# variables > Actions, e.g. ANTHROPIC_API_KEY) and choose e.g. "anthropic:claude-sonnet-4-5" when running.
+
+on:
+  workflow_dispatch:
+    inputs:
+      model:
+        description: "Model spec, e.g. ollama:qwen2.5:3b, anthropic:claude-sonnet-4-5, openai:gpt-4o-mini"
+        default: "ollama:qwen2.5:3b"
+      agents:
+        description: "Space-separated agent names, or 'all'"
+        default: "csv-analyst docs-qa sql-assistant chat-with-transcript chat-with-email chat-with-pdf email-writer okr-coach postmortem-writer budget-coach review-insights multi-source-router sql-docs-router graph-rag scope-checker tic-tac-toe-arena"
+  schedule:
+    - cron: "41 3 * * 0"   # weekly, default model and agents
+
+permissions:
+  contents: read
+
+jobs:
+  eval:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    env:
+      MODEL: ${{ github.event.inputs.model || 'ollama:qwen2.5:3b' }}
+      AGENTS: ${{ github.event.inputs.agents || 'csv-analyst docs-qa sql-assistant chat-with-transcript chat-with-email chat-with-pdf email-writer okr-coach postmortem-writer budget-coach review-insights multi-source-router sql-docs-router graph-rag scope-checker tic-tac-toe-arena' }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+      GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      ARMY_TIMEOUT: "900"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e . pypdf
+
+      - name: Start a local model with Ollama
+        if: startsWith(env.MODEL, 'ollama:')
+        run: |
+          curl -fsSL https://ollama.com/install.sh | sh
+          OLLAMA_CONTEXT_LENGTH=8192 nohup ollama serve > ollama.log 2>&1 &
+          for i in $(seq 1 30); do curl -sf http://localhost:11434/api/tags && break; sleep 2; done
+          ollama pull "${MODEL#ollama:}"
+
+      - name: Run evals
+        run: |
+          echo "## Evals: \`$MODEL\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Result | Agent | Time | Notes |" > report.md
+          echo "|---|---|---|---|" >> report.md
+          if [ "$AGENTS" = "all" ]; then
+            army eval --model "$MODEL" --ignore-time --report report.md || true
+          else
+            for a in $AGENTS; do army eval "$a" --model "$MODEL" --ignore-time --report report.md || true; done
+          fi
+          cat report.md >> "$GITHUB_STEP_SUMMARY"
+          passed=$(grep -c '^| PASS' report.md || true); total=$(grep -cE '^\| (PASS|FAIL)' report.md || true)
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "**$passed / $total cases passed**" >> "$GITHUB_STEP_SUMMARY"
+          echo "$passed / $total cases passed"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: eval-report
+          path: |
+            report.md
+            outputs/
+          if-no-files-found: ignore
