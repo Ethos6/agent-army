@@ -13,7 +13,7 @@ META = {
     "description": "Generates accurate reference docs with examples from your source code, and flags inconsistencies.",
     "example": "Document the public API of army/memory.py",
 }
-EVALS = [{"input": "Document the public API of army/rag.py", "must_contain": ["BM25Index", "saved"], "max_seconds": 180}]
+EVALS = [{"input": "Document the public API of army/rag.py", "must_contain": ["BM25Index", "outputs/"], "max_seconds": 180}]
 
 
 def build(llm=None):

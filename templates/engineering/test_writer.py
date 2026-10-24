@@ -12,7 +12,7 @@ META = {
     "description": "Writes branch-driven unit tests for a source file and saves them, with a coverage map.",
     "example": "Write unittest tests for army/rag.py",
 }
-EVALS = [{"input": "Write unittest tests for army/tools.py calculate()", "must_contain": ["saved", "test_"], "max_seconds": 180}]
+EVALS = [{"input": "Write unittest tests for army/tools.py calculate()", "must_contain": ["outputs/", "test_"], "max_seconds": 180}]
 
 
 def build(llm=None, framework: str = "unittest"):

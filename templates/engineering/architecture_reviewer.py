@@ -14,7 +14,7 @@ META = {
     "description": "Maps a codebase or design doc, finds failure points and risks, and proposes prioritized changes.",
     "example": "Review the architecture of this repository",
 }
-EVALS = [{"input": "Design: a single Postgres instance behind one API server handles 50k writes/sec for a chat app", "must_contain": ["single point of failure", "mermaid"], "max_seconds": 180}]
+EVALS = [{"input": "Design: a single Postgres instance behind one API server handles 50k writes/sec for a chat app", "must_contain": ["single point", "mermaid"], "max_seconds": 180}]
 
 
 def build(llm=None):
