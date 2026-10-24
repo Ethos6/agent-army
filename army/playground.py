@@ -111,12 +111,12 @@ def serve(host: str = "127.0.0.1", port: int = 8765):
                 return self._send(404, b"not found", "text/plain")
             # Other websites can't read the token or send a custom header without a CORS preflight,
             # so they can't make the playground run agents (and spend your API keys).
-            if not secrets.compare_digest(self.headers.get("x-army-token", "").encode(), token.encode()):
+            if not secrets.compare_digest(self.headers.get("x-army-token", ""), token):
                 return self._json({"error": "missing or invalid playground token; reload the page"}, 403)
             if not self.headers.get("content-type", "").startswith("application/json"):
                 return self._json({"error": "content-type must be application/json"}, 415)
             try:
-                req = json.loads(self.rfile.read(int(self.headers.get("content-length") or 0)))
+                req = json.loads(self.rfile.read(int(self.headers.get("content-length", 0))))
                 t = find(req["template"])
                 llm = get_llm(req["model"]) if req.get("model") else None
                 started = time.time()
@@ -129,7 +129,7 @@ def serve(host: str = "127.0.0.1", port: int = 8765):
             except SystemExit as e:
                 self._json({"error": str(e)}, 400)
             except Exception as e:
-                traceback.print_exc(); self._json({"error": "invalid request" if isinstance(e, ValueError) else "internal error"}, 400 if isinstance(e, ValueError) else 500)
+                self._json({"error": f"{type(e).__name__}: {e}", "trace": traceback.format_exc()[-2000:]}, 500)
 
     server = ThreadingHTTPServer((host, port), Handler)
     print(f"Agent Army playground: http://{host}:{port}  ({len(catalog)} templates, Ctrl+C to stop)")
