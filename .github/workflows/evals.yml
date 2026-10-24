@@ -64,6 +64,12 @@ jobs:
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "**$passed / $total cases passed**" >> "$GITHUB_STEP_SUMMARY"
           echo "$passed / $total cases passed"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "### Agent outputs" >> "$GITHUB_STEP_SUMMARY"
+          for f in outputs/evals/*.md; do
+            [ -f "$f" ] || continue
+            { echo "<details><summary>$(basename "$f" .md)</summary>"; echo ""; echo '```'; head -c 6000 "$f"; echo ""; echo '```'; echo "</details>"; } >> "$GITHUB_STEP_SUMMARY"
+          done
 
       - uses: actions/upload-artifact@v4
         if: always()
