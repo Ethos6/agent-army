@@ -329,7 +329,7 @@ Optional: `TAVILY_API_KEY` or `BRAVE_API_KEY` for stronger web search, `GITHUB_T
 
 | Check | Where | What it proves |
 | --- | --- | --- |
-| 59 offline unit tests | every push, Python 3.11-3.13 | the agent loop, teams, memory, RAG, SQL safety, MCP protocol, playground, chess rules (perft) and parsers for every public API |
+| 83 offline unit tests | every push, Python 3.11-3.13 | the agent loop, teams, memory, RAG, SQL safety, MCP protocol, playground, chess rules (perft) and parsers for every public API |
 | `army validate` | every push | all 110 agents have metadata, docs, eval cases and a working `build()` |
 | Live web job | every push + weekly | every web tool against the real service (search, Wikipedia, weather, FX, arXiv, Hacker News, GitHub, PyPI, RSS) |
 | Live MCP job | every push + weekly | real MCP servers started with `npx` and driven through `army.mcp` |
