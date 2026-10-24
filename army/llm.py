@@ -30,7 +30,8 @@ class LLMError(RuntimeError):
     pass
 
 
-def _post(url: str, payload: dict, headers: dict, timeout: int = 180) -> dict:
+def _post(url: str, payload: dict, headers: dict, timeout: int | None = None) -> dict:
+    timeout = timeout or int(os.environ.get("ARMY_TIMEOUT", "180"))
     req = urllib.request.Request(
         url,
         data=json.dumps(payload).encode(),

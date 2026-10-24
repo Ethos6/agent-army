@@ -167,12 +167,16 @@ def cmd_eval(args):
                 agent = build_from_args(t, args, case.get("options"))
                 out = agent.run(case["input"]).output
                 missing = [w for w in case.get("must_contain", []) if w.lower() not in out.lower()]
-                slow = time.time() - started > case.get("max_seconds", 600)
+                slow = not args.ignore_time and time.time() - started > case.get("max_seconds", 600)
                 ok, reason = not missing and not slow, (f"missing {missing}" if missing else "too slow" if slow else "")
             except Exception as e:
                 ok, reason = False, f"{type(e).__name__}: {e}"
             failures += not ok
-            print(f"{'PASS' if ok else 'FAIL'}  {t.name:<26} {time.time() - started:5.1f}s  {reason}")
+            line = f"{'PASS' if ok else 'FAIL'}  {t.name:<26} {time.time() - started:5.1f}s  {reason}"
+            print(line, flush=True)
+            if args.report:
+                with open(args.report, "a") as f:
+                    f.write(f"| {'PASS' if ok else 'FAIL'} | {t.name} | {time.time() - started:.0f}s | {reason or '-'} |\n")
     print(f"\n{total - failures}/{total} eval cases passed")
     sys.exit(1 if failures else 0)
 
@@ -391,6 +395,8 @@ def main(argv=None):
     s = sub.add_parser("eval", help="run eval cases against a real model")
     s.add_argument("template", nargs="?")
     s.add_argument("--category", choices=list(CATEGORIES))
+    s.add_argument("--ignore-time", action="store_true", help="don't fail cases for exceeding max_seconds (slow local models)")
+    s.add_argument("--report", help="append a Markdown table row per case to this file")
     run_args(s)
     s.set_defaults(fn=cmd_eval)
 
