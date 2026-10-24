@@ -1,0 +1,16 @@
+WEBVTT
+
+00:00:01.000 --> 00:00:06.000
+Welcome everyone. Today I want to talk about why most AI agent projects stall after the demo.
+
+00:00:06.500 --> 00:00:14.000
+The first reason is evaluation. Teams ship a prompt, it works on five examples, and nobody measures it again.
+
+00:00:14.500 --> 00:00:22.000
+The second reason is tools. An agent is only as reliable as the tools it calls, so sandbox them and cap their output.
+
+00:01:02.000 --> 00:01:10.000
+Third, cost. We cut our model spend by forty percent just by compressing tool observations before they reach the model.
+
+00:01:10.500 --> 00:01:18.000
+My advice: start with one job, write ten eval cases, and only then add a second agent.
