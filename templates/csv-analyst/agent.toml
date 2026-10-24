@@ -1,0 +1,10 @@
+name = "csv-analyst"
+title = "CSV Analyst Agent"
+category = "data"
+description = "Answers plain-English questions about a CSV with tool-computed numbers only, and shows its working."
+example = "Which channel drove the most revenue in examples/data/campaigns.csv?"
+
+[[evals]]
+input = "Which channel drove the most revenue in examples/data/campaigns.csv?"
+must_contain = ["Email"]
+max_seconds = 120
